@@ -1,0 +1,120 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="Header Files\Graphics and Input">
+      <UniqueIdentifier>{5e05ea27-4aeb-4893-aaef-53c351adb646}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Board">
+      <UniqueIdentifier>{450ffc45-546e-4c98-84cd-ff6212928689}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\AI">
+      <UniqueIdentifier>{bc4a4226-7e8c-479e-b64d-f6fafbacd781}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Graphics and Input">
+      <UniqueIdentifier>{f9be902c-af83-4e18-9d16-b4e1559808a9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Board">
+      <UniqueIdentifier>{a3d417d4-eb35-4a87-a6e4-48d3db69c1f7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\AI">
+      <UniqueIdentifier>{8ce31279-d04d-4312-be7a-928e1f647ca2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\AI\Testing">
+      <UniqueIdentifier>{5ec4dbf2-6123-4745-8181-52ddd8d483ee}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\AI\Testing">
+      <UniqueIdentifier>{565ea079-dace-4ee3-93fe-1d55468155b9}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\GraphicBoard.cpp">
+      <Filter>Source Files\Graphics and Input</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Drawable.cpp">
+      <Filter>Source Files\Graphics and Input</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\InputManager.cpp">
+      <Filter>Source Files\Graphics and Input</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Presenter.cpp">
+      <Filter>Source Files\Graphics and Input</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\World.cpp">
+      <Filter>Source Files\Graphics and Input</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Globals.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Position.cpp">
+      <Filter>Source Files\Board</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Piece.cpp">
+      <Filter>Source Files\Board</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\MoveGenerator.cpp">
+      <Filter>Source Files\AI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\PrecomputedData.cpp">
+      <Filter>Source Files\AI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\Move.cpp">
+      <Filter>Source Files\Board</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\TestManager.cpp">
+      <Filter>Source Files\AI\Testing</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\include\Globals.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\GraphicBoard.h">
+      <Filter>Header Files\Graphics and Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Drawable.h">
+      <Filter>Header Files\Graphics and Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\InputManager.h">
+      <Filter>Header Files\Graphics and Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Presenter.h">
+      <Filter>Header Files\Graphics and Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\World.h">
+      <Filter>Header Files\Graphics and Input</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Position.h">
+      <Filter>Header Files\Board</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Move.h">
+      <Filter>Header Files\Board</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Piece.h">
+      <Filter>Header Files\Board</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\MoveGenerator.h">
+      <Filter>Header Files\AI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\PrecomputedData.h">
+      <Filter>Header Files\AI</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\TestManager.h">
+      <Filter>Header Files\AI\Testing</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
