@@ -34,12 +34,12 @@ int main(int argc, char* argv[]) {
     initData();
     Position::initLegalMoves();
 
-    //runDebuggingTest(&world.m_board.m_pos);
-    initTests();
-    runTests();
-    //runPerft(7);
+    //initTests();
+    //runTests();
+    runPerft(7);
 
     world.init();
+    //runDebuggingTest(&world.m_board.m_pos);
 
     while (1) {
         // new second starts

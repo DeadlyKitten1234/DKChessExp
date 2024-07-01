@@ -1,8 +1,6 @@
 #include "MoveGenerator.h"
 #include "PrecomputedData.h"
 
-#define debug(x) std::cout << "Line: " << __LINE__ << "; " << #x << " is " << (x) << "\n"
-
 uint64_t tileAttacked;
 uint64_t tileDoubleAttacked;
 uint64_t tileBlocksCheck;
@@ -10,31 +8,24 @@ int8_t tilePinnedDir[64];
 int8_t nullPinnedDir = -1;
 
 inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t ignoreStTile, int8_t addEndTile, int8_t ignoreEnPassantCaptureTile) {
-	for (int8_t dirIdx = 0; dirIdx < 9; dirIdx++) {
-		if (dirIdx == 4) {
-			dirIdx++;
-		}
-		int8_t curPos = tile;
-		while (moveInbounds(getX(curPos), getY(curPos), dirIdx)) {
-			curPos += dirAdd[dirIdx];
-			if (curPos == addEndTile) {
-				break;
-			}
-			if (pos.m_pieceOnTile[curPos] != nullptr && curPos != ignoreStTile && curPos != ignoreEnPassantCaptureTile) {
-				if (pos.m_pieceOnTile[curPos]->black != pos.m_blackToMove) {
-					if (pos.m_pieceOnTile[curPos]->getMovesInDir(dirIdx)) {
-						return 1;
-					}
-				}
-				break;
-			}
-		}
+	uint64_t blockers = (pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard);
+	blockers ^= (1ULL << ignoreStTile) | (1ULL << ignoreEnPassantCaptureTile);
+	blockers |= 1ULL << addEndTile;
+	uint64_t enemyDiagPcs = (pos.m_blackToMove ? pos.m_whiteBitboards[BISHOP] | pos.m_whiteBitboards[QUEEN] :
+											 	 pos.m_blackBitboards[BISHOP] | pos.m_blackBitboards[QUEEN]);
+	if (bishopMovesLookup[tile][getMagicIdx(blockers & bishopRelevantSq[tile], tile, 1)] & enemyDiagPcs) {
+		return 1;
+	}
+	uint64_t enemyStraightPcs = (pos.m_blackToMove ? pos.m_whiteBitboards[ROOK] | pos.m_whiteBitboards[QUEEN] :
+													 pos.m_blackBitboards[ROOK] | pos.m_blackBitboards[QUEEN]);
+	if (rookMovesLookup[tile][getMagicIdx(blockers & rookRelevantSq[tile], tile, 0)] & enemyStraightPcs) {
+		return 1;
 	}
 	return 0;
 }
 
 inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curMoveCnt, bool inCheck) {
-	int16_t ans = 0;
+	int16_t ans = curMoveCnt;
 	Piece* king = (pos.m_blackToMove ? pos.m_blackPiece[0] : pos.m_whitePiece[0]);
 	//Lookup moves and remove ones that have friendly pieces on them
 	uint64_t possibleMoves = kingMovesLookup[king->pos] & ~(pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
@@ -50,8 +41,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			//Can't castle through check
 			if (!(tileAttacked & importansSq)) {
 				//Directly add move, because not worth |= 1 << newPos to just add it later
-				out[curMoveCnt++] = createMove(king->pos, king->pos + 2);
-				ans++;
+				out[ans++] = createMove(king->pos, king->pos + 2);
 			}
 		}
 	}
@@ -63,112 +53,92 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			//& ~(1 << pos - 3) is here, b1 (or b7 for black) can be attacked and can still castle 
 			if (!(tileAttacked & (importansSq & ~(1ULL << (king->pos - 3))))) {
 				//Directly add move, because not worth |= 1 << newPos to just add it later
-				out[curMoveCnt++] = createMove(king->pos, king->pos - 2);
-				ans++;
+				out[ans++] = createMove(king->pos, king->pos - 2);
+
 			}
 		}
 	}
 	//Extract moves from bitmask
 	while (possibleMoves != 0) {
 		int8_t curPos = getLSBPos(possibleMoves);
-		out[curMoveCnt++] = createMove(king->pos, curPos);
-		ans++;
+		out[ans++] = createMove(king->pos, curPos);
 		possibleMoves &= possibleMoves - 1;
 	}
-	return ans;
+	return ans - curMoveCnt;
 }
 
-inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint64_t bitmask, int8_t enPassantTile, int8_t dirIdx, bool doubleMove, bool blackToMove, bool inCheck) {
-	int16_t ans = 0;
+inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint64_t bitmask, int8_t dirIdx, bool doubleMove, bool blackToMove) {
+	int16_t ans = moveStIdx;
 	while (bitmask != 0) {
 		int8_t pos = getLSBPos(bitmask);
 		int8_t stPos = pos - dirAdd[dirIdx] - (doubleMove ? dirAdd[dirIdx] : 0);
 		if (tilePinnedDir[stPos] == nullPinnedDir || tilePinnedDir[stPos] == dirIdx || 8 - tilePinnedDir[stPos] == dirIdx) {
 			if ((blackToMove && pos < 8) || (!blackToMove && pos > 55)) {
 				for (int8_t i = QUEEN; i <= ROOK; i++) {
-					out[moveStIdx++] = createMove(stPos, pos, PieceType(i));
-					ans++;
+					out[ans++] = createMove(stPos, pos, PieceType(i));
 				}
 			} else {
-				out[moveStIdx++] = createMove(stPos, pos);
-				ans++;
+				out[ans++] = createMove(stPos, pos);
 			}
 		}
 		bitmask &= bitmask - 1;
 	}
-	return ans;
+	return ans - moveStIdx;
 }
 
 inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t moveStIdx, bool inCheck) {
-	int16_t ans = 0;
+	int16_t ans = moveStIdx;
 	const uint64_t friendlyPawnsBitboard = (pos.m_blackToMove ? pos.m_blackBitboards[PAWN] : pos.m_whiteBitboards[PAWN]);
+	const uint64_t emptySq = ~(pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard);
+	uint64_t moveB1, moveB2;
+	//Regular and double move
+	if (pos.m_blackToMove) {
+		moveB1 = (friendlyPawnsBitboard >> 8) & emptySq;
+		moveB2 = (moveB1 >> 8) & emptySq & rowBitmask[4];
+	} else {
+		moveB1 = (friendlyPawnsBitboard << 8) & emptySq;
+		moveB2 = (moveB1 << 8) & emptySq & rowBitmask[3];
+	}
+	if (inCheck) {
+		moveB1 &= tileBlocksCheck;
+		moveB2 &= tileBlocksCheck;
+	}
 	int8_t dirIdx = dirIdxFromCoordChange[(pos.m_blackToMove ? 0 : 2)][1];
-
-	//Regular Move
-	uint64_t movesBitmask = friendlyPawnsBitboard;
-	for (int8_t i = 0; i < 2; i++) {
-		//Shift pawn forwards
-		if (pos.m_blackToMove) {
-			movesBitmask >>= 8;
-		} else {
-			movesBitmask <<= 8;
+	ans += extractPawnMovesFromBitmask(out, ans, moveB1, dirIdx, 0, pos.m_blackToMove);
+	ans += extractPawnMovesFromBitmask(out, ans, moveB2, dirIdx, 1, pos.m_blackToMove);
+	//Captures
+	uint64_t epBitboard1 = 0;
+	uint64_t epBitboard2 = 0;
+	if (pos.m_possibleEnPassant != -1) {
+		int8_t enPassantablePawnPos = pos.m_possibleEnPassant + (pos.m_blackToMove ? 8 : -8);
+		int8_t pawnToEnPassantPos = enPassantablePawnPos + 1;
+		int8_t friendlyKingPos = (pos.m_blackToMove ? pos.m_blackPiece[0]->pos : pos.m_whitePiece[0]->pos);
+		//Check if after en passant pawn will reveal attack on king
+		if (!tileAttackedBySlidingPiece(pos, friendlyKingPos, pawnToEnPassantPos, pos.m_possibleEnPassant, enPassantablePawnPos)) {
+			epBitboard1 = (1ULL << pos.m_possibleEnPassant);
 		}
-		//If double push, only look at pawns on their starting squares
-		if (i == 1) {
-			//Using values row[3] and row[4], because bitmask has already moved twice
-			if (pos.m_blackToMove) {
-				movesBitmask &= rowBitmask[4];
-			} else {
-				movesBitmask &= rowBitmask[3];
-			}
+		pawnToEnPassantPos -= 2;
+		//Check if after en passant pawn will reveal attack on king
+		if (!tileAttackedBySlidingPiece(pos, friendlyKingPos, pawnToEnPassantPos, pos.m_possibleEnPassant, enPassantablePawnPos)) {
+			epBitboard2 = (1ULL << pos.m_possibleEnPassant);
 		}
-		//Remove tiles where there is piece from possible moves
-		movesBitmask &= ~(pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard);
-		//If in check => &= blocksCheck; Original movesBitmask isn't changed, because we want to use it for double moves too
-		uint64_t legalMovesBitmask = movesBitmask;
-		if (inCheck) {
-			legalMovesBitmask &= tileBlocksCheck;
-		}
-		//Extract moves from created bitmask
-		int16_t res = extractPawnMovesFromBitmask(out, moveStIdx, legalMovesBitmask, pos.m_possibleEnPassant, dirIdx, (i == 1), pos.m_blackToMove, inCheck);
-		ans += res;
-		moveStIdx += res;
 	}
-	//Capture
-	for (int8_t i = 0; i < 2; i++) {
-		movesBitmask = friendlyPawnsBitboard & ~(colBitmask[(i == 0 ? 7 : 0)]);
-		//Set dirIdx
-		dirIdx = dirIdxFromCoordChange[(pos.m_blackToMove ? 0 : 2)][(i == 0 ? 2 : 0)];
-		//Shift pawn forward and change X by 1
-		if (pos.m_blackToMove) {
-			//Here use '-', because shifting right and to decrease X have to increase shift value, and the same for increasing
-			movesBitmask >>= 8 - (i == 0 ? 1 : -1);
-		} else {
-			movesBitmask <<= 8 + (i == 0 ? 1 : -1);
-		}
-		//Account for en passant
-		uint64_t addEnPassantBitboard = 0;
-		if (pos.m_possibleEnPassant != -1) {
-			int8_t enPassantablePawnPos = pos.m_possibleEnPassant + (pos.m_blackToMove ? 8 : -8);
-			int8_t pawnToEnPassantPos = enPassantablePawnPos - (i == 0 ? 1 : -1);
-			int8_t friendlyKingPos = (pos.m_blackToMove ? pos.m_blackPiece[0]->pos : pos.m_whitePiece[0]->pos);
-			//Check if after en passant pawn will reveal attack on king
-			if (!tileAttackedBySlidingPiece(pos, friendlyKingPos, pawnToEnPassantPos, pos.m_possibleEnPassant, enPassantablePawnPos)) {
-				addEnPassantBitboard = (1ULL << pos.m_possibleEnPassant);
-			}
-		}
-		//Remove empty tiles and ones with friendly pieces
-		movesBitmask &= (pos.m_blackToMove ? pos.m_whiteAllPiecesBitboard : pos.m_blackAllPiecesBitboard) | addEnPassantBitboard;
-		//If in check => &= blocksCheck
-		if (inCheck) {
-			movesBitmask &= tileBlocksCheck | addEnPassantBitboard;
-		}
-		//Extract moves from created bitmask
-		int16_t res = extractPawnMovesFromBitmask(out, moveStIdx, movesBitmask, pos.m_possibleEnPassant, dirIdx, 0, pos.m_blackToMove, inCheck);
-		ans += res;
-		moveStIdx += res;
+	if (pos.m_blackToMove) {
+		moveB1 = ((friendlyPawnsBitboard & ~colBitmask[0]) >> 9) & (pos.m_whiteAllPiecesBitboard | epBitboard1);
+		moveB2 = ((friendlyPawnsBitboard & ~colBitmask[7]) >> 7) & (pos.m_whiteAllPiecesBitboard | epBitboard2);
+	} else {
+		moveB1 = ((friendlyPawnsBitboard & ~colBitmask[0]) << 7) & (pos.m_blackAllPiecesBitboard | epBitboard1);
+		moveB2 = ((friendlyPawnsBitboard & ~colBitmask[7]) << 9) & (pos.m_blackAllPiecesBitboard | epBitboard2);
 	}
-	return ans;
+	if (inCheck) {
+		moveB1 &= tileBlocksCheck | epBitboard1;
+		moveB2 &= tileBlocksCheck | epBitboard2;
+	}
+	dirIdx = dirIdxFromCoordChange[(pos.m_blackToMove ? 0 : 2)][0];
+	ans += extractPawnMovesFromBitmask(out, ans, moveB1, dirIdx, 0, pos.m_blackToMove);
+	dirIdx = dirIdxFromCoordChange[(pos.m_blackToMove ? 0 : 2)][2];
+	ans += extractPawnMovesFromBitmask(out, ans, moveB2, dirIdx, 0, pos.m_blackToMove);
+	return ans - moveStIdx;
 }
 
 inline int16_t generateSlidingPieceMoves(const Position& pos, int16_t* out, int16_t curMoveCnt, Piece& piece, bool inCheck) {
@@ -202,18 +172,17 @@ inline int16_t generateSlidingPieceMoves(const Position& pos, int16_t* out, int1
 		}
 	}
 	//Extract moves from bitmask
-	int16_t ans = 0;
+	int16_t ans = curMoveCnt;
 	while (possibleMoves != 0) {
 		int8_t curPos = getLSBPos(possibleMoves);
-		out[curMoveCnt++] = createMove(piece.pos, curPos);
-		ans++;
+		out[ans++] = createMove(piece.pos, curPos);
 		possibleMoves &= possibleMoves - 1;
 	}
-	return ans;
+	return ans - curMoveCnt;
 }
 
 inline int16_t generateKnightMoves(const Position& pos, int16_t* out, int16_t curMoveCnt, Piece& knight, bool inCheck) {
-	int16_t newMovesCnt = 0;
+	int16_t ans = curMoveCnt;
 	//Pinned
 	if (tilePinnedDir[knight.pos] != nullPinnedDir) {
 		return 0;
@@ -225,11 +194,10 @@ inline int16_t generateKnightMoves(const Position& pos, int16_t* out, int16_t cu
 	}
 	while (possibleMoves != 0) {
 		int8_t curPos = getLSBPos(possibleMoves);
-		out[curMoveCnt++] = createMove(knight.pos, curPos);
-		newMovesCnt++;
+		out[ans++] = createMove(knight.pos, curPos);
 		possibleMoves &= possibleMoves - 1;
 	}
-	return newMovesCnt;
+	return ans - curMoveCnt;
 }
 
 inline void addAttack(uint64_t bitmask) {
@@ -241,11 +209,11 @@ inline void generateBishopAttackTiles(Piece* bishop, Piece* friendlyKing, uint64
 	uint64_t kingBitboard = (1ULL << friendlyKing->pos);
 	allPiecesBitboard &= ~(kingBitboard);
 	int8_t pos = bishop->pos;
-	uint64_t relevantBitmask = bishopRelevantSq[pos] & (allPiecesBitboard & ~(1ULL << pos));
+	uint64_t relevantBitmask = bishopRelevantSq[pos] & allPiecesBitboard;
 	addAttack(bishopMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 1)]);
 	//Set blocks check
 	if (bishopMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 1)] & kingBitboard) {
-		relevantBitmask = bishopRelevantSq[pos] & ((allPiecesBitboard | kingBitboard) & ~(1ULL << pos));
+		relevantBitmask = bishopRelevantSq[pos] & (allPiecesBitboard | kingBitboard);
 		uint64_t kingRelevantBitmask = bishopRelevantSq[friendlyKing->pos] & allPiecesBitboard;
 		//Get bitmask of bishopmoves from bishop and king and say their overlap blocks check
 		tileBlocksCheck |= bishopMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 1)] &
@@ -254,13 +222,14 @@ inline void generateBishopAttackTiles(Piece* bishop, Piece* friendlyKing, uint64
 	}
 	//Add pins
 	if (bishop->diagMain == friendlyKing->diagMain || bishop->diagScnd == friendlyKing->diagScnd) {
-		relevantBitmask = bishopRelevantSq[pos] & ((allPiecesBitboard | kingBitboard) & ~(1ULL << pos));
+		relevantBitmask = bishopRelevantSq[pos] & (allPiecesBitboard | kingBitboard);
 		uint64_t kingRelevantBitmask = bishopRelevantSq[friendlyKing->pos] & allPiecesBitboard;
 		//Get bitmask of bishopmoves from bishop and king and see if they overlap on a square with a piece on it
 		uint64_t commonMoveBitmask = bishopMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 1)] &
 			bishopMovesLookup[friendlyKing->pos][getMagicIdx(kingRelevantBitmask, friendlyKing->pos, 1)];
 		//If enemy piece is on tile we dont care, because we won't try to move it anyway
-		if (commonMoveBitmask != 0) {
+		// && (commonMoveBitmask & (commonMoveBitmask - 1)) == 0 is to check if commonMoveBitmask has only 1 bit
+		if (commonMoveBitmask != 0 && (commonMoveBitmask & (commonMoveBitmask - 1)) == 0) {
 			tilePinnedDir[getLSBPos(commonMoveBitmask)] = (bishop->diagMain == friendlyKing->diagMain ? 0 : 2);
 		}
 	}
@@ -270,11 +239,11 @@ inline void generateRookAttackTiles(Piece* rook, Piece* friendlyKing, uint64_t a
 	uint64_t kingBitboard = (1ULL << friendlyKing->pos);
 	allPiecesBitboard &= ~(kingBitboard);
 	int8_t pos = rook->pos;
-	uint64_t relevantBitmask = rookRelevantSq[pos] & (allPiecesBitboard & ~(1ULL << pos));
+	uint64_t relevantBitmask = rookRelevantSq[pos] & allPiecesBitboard;
 	addAttack(rookMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 0)]);
 	//Set blocks check
 	if ((rookMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 0)] & kingBitboard)  != 0) {
-		relevantBitmask = rookRelevantSq[pos] & ((allPiecesBitboard | kingBitboard) & ~(1ULL << pos));
+		relevantBitmask = rookRelevantSq[pos] & (allPiecesBitboard | kingBitboard);
 		uint64_t kingRelevantBitmask = rookRelevantSq[friendlyKing->pos] & allPiecesBitboard;
 		//Get bitmask of rookmoves from rook and king and say their overlap blocks check
 		tileBlocksCheck |= rookMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 0)] &
@@ -283,13 +252,14 @@ inline void generateRookAttackTiles(Piece* rook, Piece* friendlyKing, uint64_t a
 	}
 	//Add pins
 	if (rook->x == friendlyKing->x || rook->y == friendlyKing->y) {
-		relevantBitmask = rookRelevantSq[pos] & ((allPiecesBitboard | kingBitboard) & ~(1ULL << pos));
+		relevantBitmask = rookRelevantSq[pos] & (allPiecesBitboard | kingBitboard);
 		uint64_t kingRelevantBitmask = rookRelevantSq[friendlyKing->pos] & allPiecesBitboard;
 		//Get bitmask of rookmoves from rook and king and see if they overlap on a square with a piece on it
 		uint64_t commonMoveBitmask = rookMovesLookup[pos][getMagicIdx(relevantBitmask, pos, 0)] &
 			rookMovesLookup[friendlyKing->pos][getMagicIdx(kingRelevantBitmask, friendlyKing->pos, 0)];
 		//If enemy piece is on tile we dont care, because we won't try to move it anyway
-		if (commonMoveBitmask != 0) {
+		// && (commonMoveBitmask & (commonMoveBitmask - 1)) == 0 is to check if commonMoveBitmask has only 1 bit
+		if (commonMoveBitmask != 0 && (commonMoveBitmask & (commonMoveBitmask - 1)) == 0) {
 			tilePinnedDir[getLSBPos(commonMoveBitmask)] = (rook->x == friendlyKing->x ? 1 : 3);
 		}
 	}

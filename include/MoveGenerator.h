@@ -15,11 +15,11 @@ extern uint64_t tileBlocksCheck;
 extern int8_t tilePinnedDir[64];
 extern int8_t nullPinnedDir;
 
-extern inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t ignoreStTile = -1, int8_t addEndTile = -1, int8_t ignoreEnPassantCaptureTile = -1);
+extern inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t ignoreStTile, int8_t addEndTile, int8_t ignoreEnPassantCaptureTile);
 
 extern inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curMoveCnt, bool inCheck);
 
-extern inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint64_t bitmask, int8_t enPassantTile, int8_t dirIdx, bool doubleMove, bool blackToMove, bool inCheck);
+extern inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint64_t bitmask, int8_t dirIdx, bool doubleMove, bool blackToMove);
 extern inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t moveStIdx, bool inCheck);
 
 extern inline int16_t generateSlidingPieceMoves(const Position& pos, int16_t* out, int16_t curMoveCnt, Piece& piece, bool inCheck);

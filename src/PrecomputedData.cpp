@@ -10,26 +10,10 @@ const int8_t knightMoveAdd[8] = { -17, -15, -10, -6, 6, 10, 15, 17 };
 const int8_t knightMoveAddX[8] = { -1, 1, -2, 2, -2, 2, -1, 1 };
 const int8_t knightMoveAddY[8] = { -2, -2, -1, -1, 1, 1, 2, 2 };
 
-inline int8_t getX(const int8_t pos) {
-	return (pos & 7);//7 = 111
-};
-inline int8_t getY(const int8_t pos) {
-	return (pos & 56) >> 3;//56 = 111000
-};
-inline int8_t getDiagM(const int8_t pos) {
-	return getX(pos) - getY(pos) + 7;
-}
-inline int8_t getDiagS(const int8_t pos) {
-	return getX(pos) + getY(pos);
-}
-
 uint64_t rowBitmask[8];
 uint64_t colBitmask[8];
 uint64_t mainDiagBitmask[15];
 uint64_t scndDiagBitmask[15];
-
-uint64_t lsbMagicNum = 8754477392002374565;
-int8_t lsbMagicLookup[256];
 
 uint64_t knightMovesLookup[64];
 uint64_t kingMovesLookup[64];
@@ -65,7 +49,6 @@ void initData() {
 	populateNumberOfSquaresToEdge();
 	populateGlobalDirectionBitmasks();
 	populateMovementBitmasks();
-	populateLSBLookup();
 	populateMovesLookup();
 }
 
@@ -87,10 +70,6 @@ void populateNumberOfSquaresToEdge() {
 			}
 		}
 	}
-}
-
-inline int8_t getLSBPos(const uint64_t bitmask) {
-	return lsbMagicLookup[((bitmask & ((~bitmask) + 1)) * lsbMagicNum) >> 56];
 }
 
 void populateMovementBitmasks() {
@@ -138,13 +117,6 @@ void populateMovementBitmasks() {
 				kingMovesLookup[i] |= 1ULL << (i + dirAdd[j]);
 			}
 		}
-	}
-}
-
-void populateLSBLookup() {
-	for (int i = 0; i < 64; i++) {
-		uint64_t bitmask = 1ULL << i;
-		lsbMagicLookup[(bitmask * lsbMagicNum) >> 56] = i;
 	}
 }
 
