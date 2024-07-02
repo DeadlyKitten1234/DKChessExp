@@ -1,7 +1,6 @@
 #include "PrecomputedData.h"
 #include "Move.h"
 
-	  int8_t numberOfSquaresToEdge[9][8][8];
 const int8_t dirAdd[9] = { -9, -8, -7, -1, -1000, 1, 7, 8, 9 };
 const int8_t dirAddX[9] = { -1, 0, 1, -1, 0, 1, -1, 0, 1 };
 const int8_t dirAddY[9] = { -1, -1, -1, 0, 0, 0, 1, 1, 1 };
@@ -14,6 +13,7 @@ uint64_t rowBitmask[8];
 uint64_t colBitmask[8];
 uint64_t mainDiagBitmask[15];
 uint64_t scndDiagBitmask[15];
+uint64_t betweenBitboard[64][64];
 
 uint64_t knightMovesLookup[64];
 uint64_t kingMovesLookup[64];
@@ -46,30 +46,10 @@ uint64_t rookRelevantSq[64];
 uint64_t bishopRelevantSq[64];
 
 void initData() {
-	populateNumberOfSquaresToEdge();
 	populateGlobalDirectionBitmasks();
 	populateMovementBitmasks();
 	populateMovesLookup();
-}
-
-void populateNumberOfSquaresToEdge() {
-	for (int8_t dirIdx = 0; dirIdx < 9; dirIdx++) {
-		if (dirIdx == 4) {
-			dirIdx++;
-		}
-		for (int8_t i = 0; i < 8; i++) {
-			for (int8_t j = 0; j < 8; j++) {
-				int8_t ans = 0;
-				int8_t x = j, y = i;
-				while (0 <= x && x <= 7 && 0 <= y && y <= 7) {
-					x += dirAddX[dirIdx];
-					y += dirAddY[dirIdx];
-					ans++;
-				}
-				numberOfSquaresToEdge[dirIdx][i][j] = ans - 1;
-			}
-		}
-	}
+	populateBetweemBitboards();
 }
 
 void populateMovementBitmasks() {
@@ -115,6 +95,23 @@ void populateMovementBitmasks() {
 			}
 			if (moveInbounds(getX(i), getY(i), j)) {
 				kingMovesLookup[i] |= 1ULL << (i + dirAdd[j]);
+			}
+		}
+	}
+}
+
+void populateBetweemBitboards() {
+	for (int i = 0; i < 64; i++) {
+		for (int j = 0; j < 64; j++) {
+			if (i == j) {
+				continue;
+			}
+			uint64_t blockers = (1ULL << i) | (1ULL << j);
+			if (getX(i) == getX(j) || getY(i) == getY(j)) {
+				betweenBitboard[i][j] = attacks<ROOK>(i, blockers) & attacks<ROOK>(j, blockers);
+			}
+			if (getDiagM(i) == getDiagM(j) || getDiagS(i) == getDiagS(j)) {
+				betweenBitboard[i][j] = attacks<BISHOP>(i, blockers) & attacks<BISHOP>(j, blockers);
 			}
 		}
 	}

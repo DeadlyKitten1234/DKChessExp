@@ -20,11 +20,13 @@ MAXIMUM OPTIMISATIONS IS:
 make sure to compile on x64
 TODO:
     -optimize
+    .make better way to detect king legal moves
     .for loop in Position::makeMove when capturing might be slow (could store index inside pieces)
-    .move generation is 25s for perft 7, while stockfish's is 15s :(
+    .move generation is 22.5s for perft 7, while stockfish's is 15s :(
 */
 
 //Current pos depth 6 is incorrect
+#include "MoveGenerator.h"
 int main(int argc, char* argv[]) {
     unsigned long long lastSecond = 0;
     unsigned long long lastTick = 0;
