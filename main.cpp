@@ -21,8 +21,6 @@ make sure to compile on x64
 TODO:
     -optimize
     .make better way to detect king legal moves
-    .for loop in Position::makeMove when capturing might be slow (could store index inside pieces)
-    .move generation is 22.5s for perft 7, while stockfish's is 15s :(
 */
 
 //Current pos depth 6 is incorrect
@@ -38,7 +36,7 @@ int main(int argc, char* argv[]) {
 
     //initTests();
     //runTests();
-    runPerft(7);
+    //runPerft(7);
 
     world.init();
     //runDebuggingTest(&world.m_board.m_pos);

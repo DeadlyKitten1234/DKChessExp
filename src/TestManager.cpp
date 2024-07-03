@@ -82,6 +82,7 @@ void runDebuggingTest(Position* worldPos) {
     ifstream read;
     read.open("assets/tests/PerftTests/DebuggingTest.txt");
     int depth;
+    long long stTime = clock();
     char* fen = new char[128]();
     read >> depth >> std::ws;
     read.getline(fen, 128);
@@ -90,7 +91,8 @@ void runDebuggingTest(Position* worldPos) {
     }
     Position pos = Position();
     pos.readFEN(fen);
-    cout << "Total: " << perft(pos, depth) << "\n";
+    cout << "Total: " << perft(pos, depth);
+    cout << "; Time: " << clock() - stTime << "\n";
 }
 
 void runPerft(int depth) {
