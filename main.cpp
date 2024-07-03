@@ -3,7 +3,7 @@
 #include "TestManager.h"
 #include "PrecomputedData.h"
 #include "Move.h"
-#include <iostream>
+#include "AI.h"
 using std::cin;
 using std::cout;
 using std::endl;
@@ -19,12 +19,12 @@ MAXIMUM OPTIMISATIONS IS:
 -/O2; /Ob2; whatever(i use /Oi); /Ot; wahtever(i use No(/Oy-)); wahtever(i use No); /GL
 make sure to compile on x64
 TODO:
-    -optimize
-    .make better way to detect king legal moves
+    -add move ordering and zobrist transposition table
+    -add another bool to template<> search for knowing if it is root, then to print(temp)/store best move
+    -add some tests? (take them from chess.com puzzles) in TestMaganer
 */
 
-//Current pos depth 6 is incorrect
-#include "MoveGenerator.h"
+#include <iostream>
 int main(int argc, char* argv[]) {
     unsigned long long lastSecond = 0;
     unsigned long long lastTick = 0;
@@ -33,12 +33,18 @@ int main(int argc, char* argv[]) {
 
     initData();
     Position::initLegalMoves();
+    
+    //Position* test = new Position();
+    //test->readFEN("8/k7/7R/6R1/8/8/8/7K w - - 0 1");
+    //AI testAI;
+    //testAI.initPos(test);
+    //std::cout << testAI.search<1>(4, -1000000, 1000000);
 
-    initTests();
-    runTests();
+    //initTests();
+    //runTests();
     //runPerft(7);
 
-    world.init();
+    //world.init();
     //runDebuggingTest(&world.m_board.m_pos);
 
     while (1) {

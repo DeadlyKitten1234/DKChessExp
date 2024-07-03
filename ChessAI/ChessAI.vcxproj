@@ -157,6 +157,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp" />
+    <ClCompile Include="..\src\AI.cpp" />
     <ClCompile Include="..\src\GraphicBoard.cpp" />
     <ClCompile Include="..\src\Drawable.cpp" />
     <ClCompile Include="..\src\Globals.cpp" />
@@ -171,6 +172,7 @@
     <ClCompile Include="..\src\World.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\include\AI.h" />
     <ClInclude Include="..\include\GraphicBoard.h" />
     <ClInclude Include="..\include\Drawable.h" />
     <ClInclude Include="..\include\Globals.h" />

@@ -23,6 +23,7 @@ Position::Position() {
 	m_whiteBitboards = nullptr;
 	m_blackBitboards = nullptr;
 	m_legalMovesCnt = 0;
+	inCheck = 0;
 }
 
 Position::~Position() {
@@ -360,6 +361,7 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 
 void Position::updateLegalMoves() {
 	m_legalMovesCnt = generateMoves(*this, m_legalMoves, m_legalMovesStartIdx);
+	friendlyInCheck = inCheck;//inCheck is declared in MoveGenerator.h
 }
 
 int16_t Position::evaluate() {
@@ -369,7 +371,7 @@ int16_t Position::evaluate() {
 		ans += m_whitePiecesCnt[i] * pieceValue[i];
 		ans -= m_blackPiecesCnt[i] * pieceValue[i];
 	}
-	return ans * (m_blackToMove ? -1 : 1);
+	return ans;
 }
 
 void Position::initLegalMoves() {

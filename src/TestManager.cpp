@@ -52,20 +52,17 @@ long long perft(Position& pos, int depth, bool maxDepth) {
         return pos.m_legalMovesCnt;
     }
     int16_t cnt = pos.m_legalMovesCnt;
+    const int16_t* moves = pos.m_legalMoves + pos.m_legalMovesStartIdx;
     for (int16_t i = 0; i < cnt; i++) {
         if (maxDepth) {
-            cout << getTileName(getStartPos(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]))[0] << getTileName(getStartPos(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]))[1] <<
-                getTileName(getEndPos(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]))[0] << getTileName(getEndPos(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]))[1];
-            if (getPromotionPiece(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]) != PieceType::UNDEF) {
-                cout << getCharFromType(getPromotionPiece(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]));
+            cout << getTileName(getStartPos(moves[i]))[0] << getTileName(getStartPos(moves[i]))[1] <<
+                    getTileName(getEndPos(moves[i]))[0] <<   getTileName(getEndPos(moves[i]))[1];
+            if (getPromotionPiece(moves[i]) != PieceType::UNDEF) {
+                cout << getCharFromType(getPromotionPiece(moves[i]));
             }
             cout << ": ";
         }
-        int8_t capturePos = getEndPos(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]);
-        if (capturePos == pos.m_possibleEnPassant) {
-            capturePos += (pos.m_blackToMove ? 8 : -8);
-        }
-        int8_t capturedPieceIdx = pos.makeMove(pos.m_legalMoves[pos.m_legalMovesStartIdx + i]);
+        int8_t capturedPieceIdx = pos.makeMove(moves[i]);
         pos.m_legalMovesStartIdx += cnt;
         long long increase = perft(pos, depth - 1, 0);
         if (maxDepth) {
@@ -73,7 +70,7 @@ long long perft(Position& pos, int depth, bool maxDepth) {
         }
         ans += increase;
         pos.m_legalMovesStartIdx -= cnt;
-        pos.undoMove(pos.m_legalMoves[pos.m_legalMovesStartIdx + i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+        pos.undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
     }
     return ans;
 }

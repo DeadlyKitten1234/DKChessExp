@@ -78,6 +78,9 @@
     <ClCompile Include="..\src\TestManager.cpp">
       <Filter>Source Files\AI\Testing</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\AI.cpp">
+      <Filter>Source Files\AI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\Globals.h">
@@ -115,6 +118,9 @@
     </ClInclude>
     <ClInclude Include="..\include\TestManager.h">
       <Filter>Header Files\AI\Testing</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\AI.h">
+      <Filter>Header Files\AI</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

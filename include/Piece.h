@@ -13,7 +13,7 @@ enum PieceType {
 	UNDEF = 6
 };
 
-const int16_t pieceValue[6] = { 16000, 900, 300, 300, 500, 100 };
+const int pieceValue[6] = { /*King value: INF = 1000000*/1000000, 1220, 400, 375, 610, 100 };
 
 class Piece {
 public:

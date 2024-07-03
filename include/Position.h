@@ -37,6 +37,8 @@ public:
 	int8_t m_bitmaskCastling;//First white; First king-side
 	int8_t m_possibleEnPassant;
 
+	bool friendlyInCheck;//Call updateLegalMoves before trusting
+
 private:
 	void deleteData();
 };
