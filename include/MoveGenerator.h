@@ -314,12 +314,10 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx
 	int16_t movesCnt = outStIdx;
 	//Caclulate if it is better to use attacked tiles (full explaination above getPinsAndChecks)
 	const uint64_t friendlyPcsBB = (pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
-		// - 1 at the end to remove king
-	int8_t enemyNonPawnPcs = (pos.m_blackToMove ? pos.m_whiteTotalPiecesCnt - pos.m_whitePiecesCnt[PAWN] : pos.m_blackTotalPiecesCnt - pos.m_blackPiecesCnt[PAWN]) - 1;
+	int8_t enemyNonPawnPcs = (pos.m_blackToMove ? pos.m_whiteTotalPiecesCnt - pos.m_whitePiecesCnt[PAWN] : pos.m_blackTotalPiecesCnt - pos.m_blackPiecesCnt[PAWN]);
 	int8_t kingMoves = kingMovesCnt(friendlyPiece[0]->pos, friendlyPcsBB);
 		// * 4 is an estimate of how many operations attackersToSq will do for every king move (we neglect castling)
-		// + 3 is to add the complexity of operations +1 to fetch king moves and +2 to shift pawns (approximately)
-	bool betterToUseAttackedTiles = enemyNonPawnPcs + 3 <= (kingMoves * 4);
+	bool betterToUseAttackedTiles = enemyNonPawnPcs <= (kingMoves * 4);
 	if (!betterToUseAttackedTiles) {
 		getPinsAndChecks<0>(pos);
 		movesCnt += generateKingMoves<0>(pos, out, movesCnt);

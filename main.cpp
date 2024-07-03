@@ -16,7 +16,7 @@ IF DEBUGGING:
 - change "Basic runtime checks" to "Both"
 - change "Debug information format" to "/Zl"
 MAXIMUM OPTIMISATIONS IS:
--/O2; /Ob2; unchange(whatever); /Ot; unchange(wahtever); unchange(wahtever); /GL
+-/O2; /Ob2; whatever(i use /Oi); /Ot; wahtever(i use No(/Oy-)); wahtever(i use No); /GL
 make sure to compile on x64
 TODO:
     -optimize
@@ -34,8 +34,8 @@ int main(int argc, char* argv[]) {
     initData();
     Position::initLegalMoves();
 
-    //initTests();
-    //runTests();
+    initTests();
+    runTests();
     //runPerft(7);
 
     world.init();
