@@ -139,7 +139,7 @@ void GraphicBoard::dropPiece(int2 mouseCoords, PieceType promotionType) {
 				for (int i = 0; i < 64; i++) {
 					m_legalMoveTile[i] = 0;
 				}
-				m_pos.updateLegalMoves();
+				m_pos.updateLegalMoves<0>();
 			}
 		}
 	}

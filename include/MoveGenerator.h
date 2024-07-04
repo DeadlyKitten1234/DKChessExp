@@ -1,5 +1,4 @@
 #pragma once
-#include <iostream>
 #include "Position.h"
 #include "PrecomputedData.h"
 #include "Piece.h"
@@ -46,11 +45,37 @@ inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t 
 }
 
 //Explaination of why we pass on bool useAttackedTiles is above getPinsAndChecks
-template<bool useAttackedTiles>
+template<bool capturesOnly, bool useAttackedTiles>
 inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curMoveCnt) {
 	int16_t ans = curMoveCnt;
 	Piece* king = (pos.m_blackToMove ? pos.m_blackPiece[0] : pos.m_whitePiece[0]);
 	uint64_t allPiecesBitboard = pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard;
+	//Lookup moves and remove ones that have friendly pieces on them
+	uint64_t possibleMoves = kingMovesLookup[king->pos] & ~(pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
+	if constexpr (useAttackedTiles) {
+		possibleMoves &= ~tileAttacked;
+	}
+	if constexpr (capturesOnly) {
+		possibleMoves &= (pos.m_blackToMove ? pos.m_whiteAllPiecesBitboard : pos.m_blackAllPiecesBitboard);
+	}
+	//Extract moves from bitmask
+	while (possibleMoves != 0) {
+		int8_t curPos = getLSBPos(possibleMoves);
+		if constexpr (useAttackedTiles) {
+			out[ans++] = createMove(king->pos, curPos);
+		}
+		if constexpr (!useAttackedTiles) {
+			if (!attackersToSq(pos, curPos, king->pos)) {
+				out[ans++] = createMove(king->pos, curPos);
+			}
+		}
+		possibleMoves &= possibleMoves - 1;
+	}
+	//Castling can't be a capture so retun
+	if constexpr (capturesOnly) {
+		return ans - curMoveCnt;
+	}
+
 	//Castling
 	bool canCastleKingside = (pos.m_bitmaskCastling & (pos.m_blackToMove ? 2 : 8)) != 0;//blackToMove ? 0010 : 1000
 	bool canCastleQueenside = (pos.m_bitmaskCastling & (pos.m_blackToMove ? 1 : 4)) != 0;//blackToMove ? 0001 : 0100
@@ -109,24 +134,6 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			}
 		}
 	}
-	//Lookup moves and remove ones that have friendly pieces on them
-	uint64_t possibleMoves = kingMovesLookup[king->pos] & ~(pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
-	if constexpr (useAttackedTiles) {
-		possibleMoves &= ~tileAttacked;
-	}
-	//Extract moves from bitmask
-	while (possibleMoves != 0) {
-		int8_t curPos = getLSBPos(possibleMoves);
-		if constexpr (useAttackedTiles) {
-			out[ans++] = createMove(king->pos, curPos);
-		}
-		if constexpr (!useAttackedTiles) {
-			if (!attackersToSq(pos, curPos, king->pos)) {
-				out[ans++] = createMove(king->pos, curPos);
-			}
-		}
-		possibleMoves &= possibleMoves - 1;
-	}
 	return ans - curMoveCnt;
 }
 
@@ -149,26 +156,30 @@ inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint
 	return ans - moveStIdx;
 }
 
+template<bool capturesOnly>
 inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t moveStIdx) {
 	int16_t ans = moveStIdx;
 	const uint64_t friendlyPawnsBitboard = (pos.m_blackToMove ? pos.m_blackBitboards[PAWN] : pos.m_whiteBitboards[PAWN]);
 	const uint64_t emptySq = ~(pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard);
 	uint64_t moveB1, moveB2;
-	//Regular and double move
-	if (pos.m_blackToMove) {
-		moveB1 = (friendlyPawnsBitboard >> 8) & emptySq;
-		moveB2 = (moveB1 >> 8) & emptySq & rowBitmask[4];
-	} else {
-		moveB1 = (friendlyPawnsBitboard << 8) & emptySq;
-		moveB2 = (moveB1 << 8) & emptySq & rowBitmask[3];
-	}
-	if (inCheck) {
-		moveB1 &= tileBlocksCheck;
-		moveB2 &= tileBlocksCheck;
-	}
 	int8_t shiftPawns = (pos.m_blackToMove ? -8 : 8);
-	ans += extractPawnMovesFromBitmask(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
-	ans += extractPawnMovesFromBitmask(out, ans, moveB2, shiftPawns, 1, pos.m_blackToMove);
+	if constexpr (!capturesOnly) {
+		//Regular and double move
+		if (pos.m_blackToMove) {
+			moveB1 = (friendlyPawnsBitboard >> 8) & emptySq;
+			moveB2 = (moveB1 >> 8) & emptySq & rowBitmask[4];
+		}
+		else {
+			moveB1 = (friendlyPawnsBitboard << 8) & emptySq;
+			moveB2 = (moveB1 << 8) & emptySq & rowBitmask[3];
+		}
+		if (inCheck) {
+			moveB1 &= tileBlocksCheck;
+			moveB2 &= tileBlocksCheck;
+		}
+		ans += extractPawnMovesFromBitmask(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
+		ans += extractPawnMovesFromBitmask(out, ans, moveB2, shiftPawns, 1, pos.m_blackToMove);
+	}
 	//Captures
 	uint64_t epBitboard1 = 0;
 	uint64_t epBitboard2 = 0;
@@ -205,7 +216,7 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 }
 
 //Here PieceType is basicly a parameter
-template<PieceType type>
+template<PieceType type, bool capturesOnly>
 inline int16_t generatePieceMoves(const Position& pos, int16_t* out, int16_t moveStIdx) {
 	int16_t ans = moveStIdx;
 	uint64_t pcsBitboard = (pos.m_blackToMove ? pos.m_blackBitboards[type] : pos.m_whiteBitboards[type]);
@@ -219,6 +230,9 @@ inline int16_t generatePieceMoves(const Position& pos, int16_t* out, int16_t mov
 		}
 		if (tilePinnedBitmask & (1ULL << piecePos)) {
 			movesBitboard &= pinnedPossibleMoves[piecePos];
+		}
+		if constexpr (capturesOnly) {
+			movesBitboard &= (pos.m_blackToMove ? pos.m_whiteAllPiecesBitboard : pos.m_blackAllPiecesBitboard);
 		}
 		while (movesBitboard != 0) {
 			int8_t destTile = getLSBPos(movesBitboard);
@@ -309,6 +323,7 @@ inline void getPinsAndChecks(const Position& pos) {
 }
 
 //Returns size
+template<bool capturesOnly>
 inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx) {
 	Piece** friendlyPiece = (pos.m_blackToMove ? pos.m_blackPiece : pos.m_whitePiece);
 	int16_t movesCnt = outStIdx;
@@ -318,21 +333,21 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx
 	int8_t kingMoves = kingMovesCnt(friendlyPiece[0]->pos, friendlyPcsBB);
 		// * 4 is an estimate of how many operations attackersToSq will do for every king move (we neglect castling)
 	bool betterToUseAttackedTiles = enemyNonPawnPcs <= (kingMoves * 4);
-	if (!betterToUseAttackedTiles) {
+	if (!betterToUseAttackedTiles || capturesOnly) {
 		getPinsAndChecks<0>(pos);
-		movesCnt += generateKingMoves<0>(pos, out, movesCnt);
+		movesCnt += generateKingMoves<capturesOnly, 0>(pos, out, movesCnt);
 	} else {
 		getPinsAndChecks<1>(pos);
-		movesCnt += generateKingMoves<1>(pos, out, movesCnt);
+		movesCnt += generateKingMoves<capturesOnly, 1>(pos, out, movesCnt);
 	}
 	if (inDoubleCheck) {
 		return movesCnt - outStIdx;
 	}
 	//Pawns
-	movesCnt += generatePawnMoves(pos, out, movesCnt);
-	movesCnt += generatePieceMoves<KNIGHT>(pos, out, movesCnt);
-	movesCnt += generatePieceMoves<QUEEN>(pos, out, movesCnt);
-	movesCnt += generatePieceMoves<ROOK>(pos, out, movesCnt);
-	movesCnt += generatePieceMoves<BISHOP>(pos, out, movesCnt);
+	movesCnt += generatePawnMoves<capturesOnly>(pos, out, movesCnt);
+	movesCnt += generatePieceMoves<KNIGHT, capturesOnly>(pos, out, movesCnt);
+	movesCnt += generatePieceMoves<QUEEN, capturesOnly>(pos, out, movesCnt);
+	movesCnt += generatePieceMoves<ROOK, capturesOnly>(pos, out, movesCnt);
+	movesCnt += generatePieceMoves<BISHOP, capturesOnly>(pos, out, movesCnt);
 	return movesCnt - outStIdx;
 }

@@ -47,7 +47,7 @@ long long perft(Position& pos, int depth, bool maxDepth) {
     long long ans = 0;
     int8_t bitmaskCastling = pos.m_bitmaskCastling;
     int8_t possibleEnPassant = pos.m_possibleEnPassant;
-    pos.updateLegalMoves();
+    pos.updateLegalMoves<0>();
     if (depth == 1) {
         return pos.m_legalMovesCnt;
     }

@@ -1,5 +1,7 @@
 #pragma once
 #include "Piece.h"
+#include "MoveGenerator.h"
+
 class Position {
 public:
 	Position();
@@ -9,16 +11,18 @@ public:
 
 	int8_t makeMove(int16_t move);//Returns captured piece idx
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
+	template<bool capturesOnly>
 	void updateLegalMoves();
-	int16_t evaluate();
+	int evaluate();
 	
 	static void initLegalMoves();
 	static const char* m_startFEN;
+
 	static int16_t* m_legalMoves;
-
-	int m_legalMovesStartIdx;
-
+	int16_t m_legalMovesStartIdx;
 	int16_t m_legalMovesCnt;
+
+	int m_piecesEval;
 
 	Piece** m_whitePiece;
 	Piece** m_blackPiece;
@@ -42,3 +46,9 @@ public:
 private:
 	void deleteData();
 };
+
+template<bool capturesOnly>
+void Position::updateLegalMoves() {
+	m_legalMovesCnt = generateMoves<capturesOnly>(*this, m_legalMoves, m_legalMovesStartIdx);
+	friendlyInCheck = inCheck;//inCheck is declared in MoveGenerator.h
+}

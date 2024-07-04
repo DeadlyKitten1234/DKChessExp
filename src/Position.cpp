@@ -4,7 +4,8 @@
 using std::swap;
 using std::abs;
 int16_t* Position::m_legalMoves = nullptr;
-const char* Position::m_startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+//const char* Position::m_startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const char* Position::m_startFEN = "q4rk1/5p1p/1RN1nPp1/4Q3/8/7P/6PK/8 w - - 0 1";
 
 Position::Position() {
 	m_blackToMove = 0;
@@ -23,7 +24,8 @@ Position::Position() {
 	m_whiteBitboards = nullptr;
 	m_blackBitboards = nullptr;
 	m_legalMovesCnt = 0;
-	inCheck = 0;
+	friendlyInCheck = 0;
+	m_piecesEval = 0;
 }
 
 Position::~Position() {
@@ -47,6 +49,7 @@ void Position::readFEN(const char* fen) {
 	m_blackTotalPiecesCnt = 0;
 	m_bitmaskCastling = 0;
 	m_blackToMove = 0;
+	m_piecesEval = 0;
 	int8_t xPos = 0;
 	int8_t yPos = 7;
 	int i = 0;
@@ -88,6 +91,8 @@ void Position::readFEN(const char* fen) {
 			if (type == PieceType::KING) {
 				swap(m_whitePiece[0], m_whitePiece[m_whiteTotalPiecesCnt]);
 			}
+			//Add to eval
+			m_piecesEval += pieceValue[type];
 			//Increase count
 			m_whiteTotalPiecesCnt++;
 			m_whitePiecesCnt[type]++;
@@ -102,6 +107,8 @@ void Position::readFEN(const char* fen) {
 			if (type == PieceType::KING) {
 				swap(m_blackPiece[0], m_blackPiece[m_blackTotalPiecesCnt]);
 			}
+			//Add to eval (subtract, because good for black = bad for white)
+			m_piecesEval -= pieceValue[type];
 			//Increase count
 			m_blackTotalPiecesCnt++;
 			m_blackPiecesCnt[type]++;
@@ -152,7 +159,7 @@ void Position::readFEN(const char* fen) {
 	}
 	//For now don't read moves since pawn push and total moves
 
-	updateLegalMoves();
+	updateLegalMoves<0>();
 }
 
 int8_t Position::makeMove(int16_t move) {
@@ -220,11 +227,13 @@ int8_t Position::makeMove(int16_t move) {
 			m_blackBitboards[promotionType] |= (1ULL << endTile);
 			m_blackPiecesCnt[promotionType]++;
 			m_blackPiecesCnt[PAWN]--;
+			m_piecesEval -= pieceValue[promotionType] - pieceValue[PAWN];// -=, because good for black = bad for white
 		} else {
 			m_whiteBitboards[PAWN] &= ~(1ULL << endTile);
 			m_whiteBitboards[promotionType] |= (1ULL << endTile);
 			m_whitePiecesCnt[promotionType]++;
 			m_whitePiecesCnt[PAWN]--;
+			m_piecesEval += pieceValue[promotionType] - pieceValue[PAWN];
 		}
 	}
 	//En Passant
@@ -245,11 +254,13 @@ int8_t Position::makeMove(int16_t move) {
 					m_whitePiecesCnt[type]--;
 					m_whiteBitboards[type] &= ~(1ULL << captureTile);
 					m_whiteAllPiecesBitboard &= ~(1ULL << captureTile);
+					m_piecesEval -= pieceValue[type];
 				} else {
 					m_blackTotalPiecesCnt--;
 					m_blackPiecesCnt[type]--;
 					m_blackBitboards[type] &= ~(1ULL << captureTile);
 					m_blackAllPiecesBitboard &= ~(1ULL << captureTile);
+					m_piecesEval += pieceValue[type];
 				}
 				swap(enemyPiece[i], enemyPiece[enemyPieceCnt - 1]);
 				capturedPieceIdx = i;
@@ -302,11 +313,13 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 			m_blackBitboards[promotionType] &= ~(1ULL << stTile);
 			m_blackPiecesCnt[promotionType]--;
 			m_blackPiecesCnt[PAWN]++;
+			m_piecesEval -= pieceValue[PAWN] - pieceValue[promotionType];
 		} else {
 			m_whiteBitboards[PAWN] |= (1ULL << stTile);
 			m_whiteBitboards[promotionType] &= ~(1ULL << stTile);
 			m_whitePiecesCnt[promotionType]--;
 			m_whitePiecesCnt[PAWN]++;
+			m_piecesEval += pieceValue[PAWN] - pieceValue[promotionType];
 		}
 	}
 	//Check for castling (because also need to revert rook)
@@ -350,28 +363,19 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 			m_whitePiecesCnt[type]++;
 			m_whiteBitboards[type] |= (1ULL << captureTile);
 			m_whiteAllPiecesBitboard |= (1ULL << captureTile);
+			m_piecesEval += pieceValue[type];
 		} else {
 			m_blackTotalPiecesCnt++;
 			m_blackPiecesCnt[type]++;
 			m_blackBitboards[type] |= (1ULL << captureTile);
 			m_blackAllPiecesBitboard |= (1ULL << captureTile);
+			m_piecesEval -= pieceValue[type];
 		}
 	}
 }
 
-void Position::updateLegalMoves() {
-	m_legalMovesCnt = generateMoves(*this, m_legalMoves, m_legalMovesStartIdx);
-	friendlyInCheck = inCheck;//inCheck is declared in MoveGenerator.h
-}
-
-int16_t Position::evaluate() {
-	int16_t ans = 0;
-	for (int8_t i = 1; i < 6; i++) {
-		//Note: we dont loop over kings since we expect both kings to be present
-		ans += m_whitePiecesCnt[i] * pieceValue[i];
-		ans -= m_blackPiecesCnt[i] * pieceValue[i];
-	}
-	return ans;
+int Position::evaluate() {
+	return m_piecesEval;
 }
 
 void Position::initLegalMoves() {

@@ -1,4 +1,4 @@
-#include "MoveGenerator.h"
+#include "Position.h"
 
 uint64_t tileBlocksCheck;
 uint64_t pinnedPossibleMoves[64];
