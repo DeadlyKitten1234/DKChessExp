@@ -37,5 +37,5 @@ extern PerftTest perftTests[100];
 extern void initTests();
 extern void runTests();
 extern void runDebuggingTest(Position* worldPos = nullptr);
-extern long long perft(Position& pos, int depth, bool maxDepth = 1);
-extern void runPerft(int depth);
+extern long long perft(Position& pos, int depth, bool root = 1);
+extern void runPerft(Position& pos, int depth);

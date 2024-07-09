@@ -1,6 +1,6 @@
 #include "AI.h"
 
-AI::AI() { pos = nullptr; }
+AI::AI() { pos = nullptr; bestMove = nullMove; }
 AI::~AI() {
 	if (pos != nullptr) {
 		delete pos;

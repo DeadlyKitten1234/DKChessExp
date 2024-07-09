@@ -1,4 +1,5 @@
 #include "PrecomputedData.h"
+#include "ZobristHashing.h"
 #include "Move.h"
 
 const int8_t dirAdd[9] = { -9, -8, -7, -1, -1000, 1, 7, 8, 9 };
@@ -62,6 +63,8 @@ void initData() {
 	populateMovesLookup();
 	populateKingMovesCnt();
 	populateBetweemBitboards();
+	//Zobrist
+	populateHashNums();
 }
 
 void populateMovementBitmasks() {

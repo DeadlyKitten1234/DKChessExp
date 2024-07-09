@@ -43,7 +43,7 @@ void runTests() {
     cout << "Total time: " << SDL_GetTicks() - globalStTime << "\nSpeed: " << totalPositions / (SDL_GetTicks() - globalStTime) << " leaves/ms\n";
 }
 
-long long perft(Position& pos, int depth, bool maxDepth) {
+long long perft(Position& pos, int depth, bool root) {
     long long ans = 0;
     int8_t bitmaskCastling = pos.m_bitmaskCastling;
     int8_t possibleEnPassant = pos.m_possibleEnPassant;
@@ -54,28 +54,25 @@ long long perft(Position& pos, int depth, bool maxDepth) {
     int16_t cnt = pos.m_legalMovesCnt;
     const int16_t* moves = pos.m_legalMoves + pos.m_legalMovesStartIdx;
     for (int16_t i = 0; i < cnt; i++) {
-        if (maxDepth) {
-            cout << getTileName(getStartPos(moves[i]))[0] << getTileName(getStartPos(moves[i]))[1] <<
-                    getTileName(getEndPos(moves[i]))[0] <<   getTileName(getEndPos(moves[i]))[1];
-            if (getPromotionPiece(moves[i]) != PieceType::UNDEF) {
-                cout << getCharFromType(getPromotionPiece(moves[i]));
-            }
+        if (root) {
+            printName(moves[i]);
             cout << ": ";
         }
         int8_t capturedPieceIdx = pos.makeMove(moves[i]);
         pos.m_legalMovesStartIdx += cnt;
         long long increase = perft(pos, depth - 1, 0);
-        if (maxDepth) {
+        if (root) {
             cout << increase << "\n";
         }
         ans += increase;
         pos.m_legalMovesStartIdx -= cnt;
         pos.undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
     }
+    pos.m_legalMovesCnt = cnt;
     return ans;
 }
 
-void runDebuggingTest(Position* worldPos) {
+void runDebuggingTest(Position* pos) {
     ifstream read;
     read.open("assets/tests/PerftTests/DebuggingTest.txt");
     int depth;
@@ -83,20 +80,16 @@ void runDebuggingTest(Position* worldPos) {
     char* fen = new char[128]();
     read >> depth >> std::ws;
     read.getline(fen, 128);
-    if (worldPos != nullptr) {
-        worldPos->readFEN(fen);
+    if (pos != nullptr) {
+        pos->readFEN(fen);
     }
-    Position pos = Position();
-    pos.readFEN(fen);
-    cout << "Total: " << perft(pos, depth);
+    cout << "Total: " << perft(*pos, depth);
     cout << "; Time: " << clock() - stTime << "\n";
 }
 
-void runPerft(int depth) {
+void runPerft(Position& pos, int depth) {
     int curTime = SDL_GetTicks();
-    Position pos;
-    pos.readFEN(Position::m_startFEN);
-    long long res = perft(pos, depth, 1);
+    long long res = perft(pos, depth);
     cout << "Nodes count: " << res;
     cout << "\nTime: " << SDL_GetTicks() - curTime << "\nSpeed: " << res / (SDL_GetTicks() - curTime) << " leaves/ms\n";
 }

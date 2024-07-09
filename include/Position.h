@@ -1,6 +1,5 @@
 #pragma once
 #include "Piece.h"
-#include "MoveGenerator.h"
 
 class Position {
 public:
@@ -13,8 +12,10 @@ public:
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
 	template<bool capturesOnly>
 	void updateLegalMoves();
-	int evaluate();
-	
+	inline int16_t evaluate() {
+		return m_piecesEval * (m_blackToMove ? -1 : 1);
+	}
+
 	static void initLegalMoves();
 	static const char* m_startFEN;
 
@@ -22,8 +23,10 @@ public:
 	int16_t m_legalMovesStartIdx;
 	int16_t m_legalMovesCnt;
 
-	int m_piecesEval;
+	int16_t m_piecesEval;
 
+	uint64_t zHash;//zobrist hash number
+	//Pieces
 	Piece** m_whitePiece;
 	Piece** m_blackPiece;
 	int8_t m_whiteTotalPiecesCnt;
@@ -46,6 +49,8 @@ public:
 private:
 	void deleteData();
 };
+
+#include "MoveGenerator.h"//Include hacks. do not move to beggining
 
 template<bool capturesOnly>
 void Position::updateLegalMoves() {

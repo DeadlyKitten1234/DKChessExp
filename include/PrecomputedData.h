@@ -1,4 +1,5 @@
 #pragma once
+#include "misc.h"
 #include "Piece.h"
 #include <cinttypes>
 
@@ -10,7 +11,7 @@ extern const int8_t knightMoveAdd[8];
 extern const int8_t knightMoveAddX[8];
 extern const int8_t knightMoveAddY[8];
 
-//Misc (maybe move to another file)
+//Misc
 inline bool moveInbounds(int8_t x, int8_t y, int8_t dirIdx) {
 	return (0 <= x + dirAddX[dirIdx] && x + dirAddX[dirIdx] <= 7
 		&& 0 <= y + dirAddY[dirIdx] && y + dirAddY[dirIdx] <= 7);
@@ -19,37 +20,6 @@ inline bool knightMoveInbounds(int8_t x, int8_t y, int8_t knightMoveIdx) {
 	return (0 <= x + knightMoveAddX[knightMoveIdx] && x + knightMoveAddX[knightMoveIdx] <= 7) &&
 		(0 <= y + knightMoveAddY[knightMoveIdx] && y + knightMoveAddY[knightMoveIdx] <= 7);
 }
-
-inline int8_t getX(const int8_t pos) {
-	return (pos & 7);//7 = 111
-};
-inline int8_t getY(const int8_t pos) {
-	return (pos & 56) >> 3;//56 = 111000
-};
-inline int8_t getDiagM(const int8_t pos) {
-	return getX(pos) - getY(pos) + 7;
-}
-inline int8_t getDiagS(const int8_t pos) {
-	return getX(pos) + getY(pos);
-}
-
-inline int8_t getLSBPos(const uint64_t bitmask) {
-	unsigned long idx;
-	_BitScanForward64(&idx, bitmask);
-	return idx;
-}
-inline int8_t countOnes(uint64_t bitmask) {
-	int8_t ans = 0;
-	while (bitmask) {
-		bitmask &= bitmask - 1;
-		ans++;
-	}
-	return ans;
-}
-inline uint64_t shift(uint64_t number, int8_t amount) {
-	return (amount < 0 ? number >> (-amount) : number << amount);
-}
-
 //Bitboards and bitmasks with no magic
 extern uint64_t knightMovesLookup[64];
 extern uint64_t kingMovesLookup[64];
@@ -107,6 +77,26 @@ inline uint64_t attacks(const int8_t sq, const uint64_t blockers) {
 			   rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
 	}
 }
+//Preferably use the template<type> attacks, because its faster
+inline uint64_t attacks(PieceType type, const int8_t sq, const uint64_t blockers) {
+	if (type == KNIGHT) {
+		return knightMovesLookup[sq];
+	}
+	if (type == KING) {
+		return kingMovesLookup[sq];
+	}
+	if (type == BISHOP) {
+		return bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)];
+	}
+	if (type == ROOK) {
+		return rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
+	}
+	if (type == QUEEN) {
+		return bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)] |
+			rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
+	}
+}
+
 inline int8_t kingMovesCnt(const int8_t pos, const uint64_t friendlyBB) {
 	return kingMovesCntLookup[pos][((friendlyBB & kingMovesLookup[pos]) * kingMagic[pos]) >> 56];
 }

@@ -3,7 +3,7 @@
 using std::int8_t;
 using std::int16_t;
 
-enum PieceType {
+enum PieceType : int8_t {
 	KING = 0,
 	QUEEN = 1,
 	BISHOP = 2,
@@ -13,7 +13,7 @@ enum PieceType {
 	UNDEF = 6
 };
 
-const int pieceValue[6] = { /*King value: INF = 1000000*/1000000, 1220, 400, 375, 610, 100 };
+const int16_t pieceValue[6] = { /*King value: INF = 10000*/10000, 1220, 400, 375, 610, 100 };
 
 class Piece {
 public:
@@ -54,6 +54,6 @@ inline char getCharFromType(PieceType piece) {
 	if (piece == PieceType::ROOK) { return 'r'; }
 	if (piece == PieceType::KNIGHT) { return 'n'; }
 	if (piece == PieceType::BISHOP) { return 'b'; }
-	if (piece == PieceType::PAWN) { return ' '; }
+	if (piece == PieceType::PAWN) { return 'p'; }
 	return PieceType::UNDEF;
 }

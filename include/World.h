@@ -16,6 +16,7 @@ public:
 	static SDL_Texture* m_backgroundTexture;
 	bool quit;
 	GraphicBoard m_board;
+
 private:
 	Presenter m_presenter;
 	InputManager m_input;

@@ -2,8 +2,6 @@
 #include "World.h"
 #include "TestManager.h"
 #include "PrecomputedData.h"
-#include "Move.h"
-#include "AI.h"
 using std::cin;
 using std::cout;
 using std::endl;
@@ -19,22 +17,31 @@ MAXIMUM OPTIMISATIONS IS:
 -/O2; /Ob2; whatever(i use /Oi); /Ot; wahtever(i use No(/Oy-)); wahtever(i use No); /GL
 make sure to compile on x64
 TODO:
-    -fix
-    .make it generate captures at the end of search
+    -change
+    .make move ordering O(nlogn) sort
+    .make more evaluations to ordering
 
     -add
-    .add move ordering and zobrist transposition table
-    .add another bool to template<> search for knowing if it is root, then to print(temp)/store best move
-    .add some tests? (take them from chess.com puzzles) in TestMaganer      
+    .add evaluation add boards and king force to edge endgame score
+    .add iterative deepening
+    .add some tests? (take them from chess.com puzzles) in TestMaganer
+    .add draws by insufficient material and repetition of moves
 
     -read
     .<https://www.chessprogramming.org/CPW-Engine_search>
+    .<https://www.chessprogramming.org/Pruning>
+    .<https://www.chessprogramming.org/Search>
+
+    .<https://www.chessprogramming.org/ProbCut>
     .<https://www.chessprogramming.org/Delta_Pruning>
     .<https://www.chessprogramming.org/Futility_Pruning>
+    .<https://www.chessprogramming.org/Reverse_Futility_Pruning>
     .<https://www.chessprogramming.org/Lazy_Evaluation>
+    .<https://www.chessprogramming.org/Lazy_SMP>
 */
-
+#include "AI.h"
 #include <iostream>
+
 int main(int argc, char* argv[]) {
     unsigned long long lastSecond = 0;
     unsigned long long lastTick = 0;
@@ -43,19 +50,24 @@ int main(int argc, char* argv[]) {
 
     initData();
     Position::initLegalMoves();
-    
-    Position* test = new Position();
-    test->readFEN("q4rk1/5p1p/1RN1nPp1/4Q3/8/7P/6PK/8 w - - 0 1");
+    tt.setSize(16);
+    initTests();
+    world.init();    
+
+    Position* pos = new Position();
+    pos->readFEN("1k6/ppp3p1/2q1p2p/2Np4/1Q1P3r/P7/1PP3r1/1KR5 w - - 0 1");
+    world.m_board.initPos(pos);
+
     AI testAI;
-    testAI.initPos(test);
-    std::cout << testAI.search<1>(6, -1000000, 1000000);
+    testAI.initPos(pos);
+    long stTime = clock();
+    std::cout << testAI.search(6, -pieceValue[KING], pieceValue[KING]) << ' ';
+    printName(testAI.bestMove);
+    std::cout << " Time: " << clock() - stTime << '\n';
 
-    //initTests();
+    //runDebuggingTest(pos);
+    //runPerft(*pos, 7);
     //runTests();
-    //runPerft(7);
-
-    world.init();
-    //runDebuggingTest(&world.m_board.m_pos);
 
     while (1) {
         // new second starts

@@ -1,3 +1,4 @@
+#include <iostream>
 #include "Move.h"
 #include "PrecomputedData.h"
 
@@ -15,9 +16,10 @@ inline PieceType getPromotionPiece(int16_t move) {
 	return PieceType((move & 28672) >> 12);//28672 = 111000000000000
 }
 
-inline char* getTileName(int8_t tile) {
-	char* ans = new char[2]();
-	ans[0] = getX(tile) + 'a';
-	ans[1] = getY(tile) + '1';
-	return ans;
+void printName(int16_t move) {
+	std::cout << char(getX(getStartPos(move)) + 'a') << char(getY(getStartPos(move)) + '1') <<
+				 char(getX(getEndPos(move)) + 'a')   << char(getY(getEndPos(move)) + '1');
+	if (getPromotionPiece(move) != PieceType::UNDEF) {
+		std::cout << getCharFromType(getPromotionPiece(move));
+	}
 }

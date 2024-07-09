@@ -20,11 +20,11 @@ inline uint64_t attackersToSq(const Position& pos, int8_t sq, int8_t ignoreStTil
 	}
 	const uint64_t* enemyBB = (pos.m_blackToMove ? pos.m_whiteBitboards : pos.m_blackBitboards);
 	return	(attacks<BISHOP>(sq, allBB) & (enemyBB[BISHOP] | enemyBB[QUEEN])) |
-			(attacks<ROOK>(sq, allBB) & (enemyBB[ROOK] | enemyBB[QUEEN]) |
+		(attacks<ROOK>(sq, allBB) & (enemyBB[ROOK] | enemyBB[QUEEN]) |
 			(knightMovesLookup[sq] & enemyBB[KNIGHT]) |
 			(kingMovesLookup[sq] & enemyBB[KING])) |
-			(shift((1ULL << sq) & ~colBitmask[0], (pos.m_blackToMove ? -8 : 8) - 1) & enemyBB[PAWN]) |
-			(shift((1ULL << sq) & ~colBitmask[7], (pos.m_blackToMove ? -8 : 8) + 1) & enemyBB[PAWN]);
+		(shift((1ULL << sq) & ~colBitmask[0], (pos.m_blackToMove ? -8 : 8) - 1) & enemyBB[PAWN]) |
+		(shift((1ULL << sq) & ~colBitmask[7], (pos.m_blackToMove ? -8 : 8) + 1) & enemyBB[PAWN]);
 }
 
 inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t ignoreStTile, int8_t addEndTile, int8_t ignoreEnPassantCaptureTile) {
@@ -32,12 +32,12 @@ inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t 
 	blockers ^= (1ULL << ignoreStTile) | (1ULL << ignoreEnPassantCaptureTile);
 	blockers |= 1ULL << addEndTile;
 	uint64_t enemyDiagPcs = (pos.m_blackToMove ? pos.m_whiteBitboards[BISHOP] | pos.m_whiteBitboards[QUEEN] :
-											 	 pos.m_blackBitboards[BISHOP] | pos.m_blackBitboards[QUEEN]);
+		pos.m_blackBitboards[BISHOP] | pos.m_blackBitboards[QUEEN]);
 	if (bishopMovesLookup[tile][getMagicIdx(blockers & bishopRelevantSq[tile], tile, 1)] & enemyDiagPcs) {
 		return 1;
 	}
 	uint64_t enemyStraightPcs = (pos.m_blackToMove ? pos.m_whiteBitboards[ROOK] | pos.m_whiteBitboards[QUEEN] :
-													 pos.m_blackBitboards[ROOK] | pos.m_blackBitboards[QUEEN]);
+		pos.m_blackBitboards[ROOK] | pos.m_blackBitboards[QUEEN]);
 	if (rookMovesLookup[tile][getMagicIdx(blockers & rookRelevantSq[tile], tile, 0)] & enemyStraightPcs) {
 		return 1;
 	}
@@ -90,7 +90,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 					illegalCastling = 1;
 				}
 			}
-			if constexpr(!useAttackedTiles) {
+			if constexpr (!useAttackedTiles) {
 				while (importantSq) {
 					if (attackersToSq(pos, getLSBPos(importantSq), king->pos)) {
 						illegalCastling = 1;
@@ -137,6 +137,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 	return ans - curMoveCnt;
 }
 
+template<bool onlyQueens>
 inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint64_t bitmask, int8_t add, bool doubleMove, bool blackToMove) {
 	int16_t ans = moveStIdx;
 	while (bitmask != 0) {
@@ -146,8 +147,12 @@ inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint
 			if ((blackToMove && pos < 8) || (!blackToMove && pos > 55)) {
 				for (int8_t i = QUEEN; i <= ROOK; i++) {
 					out[ans++] = createMove(stPos, pos, PieceType(i));
+					if constexpr (onlyQueens) {
+						break;
+					}
 				}
-			} else {
+			}
+			else {
 				out[ans++] = createMove(stPos, pos);
 			}
 		}
@@ -177,8 +182,8 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 			moveB1 &= tileBlocksCheck;
 			moveB2 &= tileBlocksCheck;
 		}
-		ans += extractPawnMovesFromBitmask(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
-		ans += extractPawnMovesFromBitmask(out, ans, moveB2, shiftPawns, 1, pos.m_blackToMove);
+		ans += extractPawnMovesFromBitmask<0>(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
+		ans += extractPawnMovesFromBitmask<0>(out, ans, moveB2, shiftPawns, 1, pos.m_blackToMove);
 	}
 	//Captures
 	uint64_t epBitboard1 = 0;
@@ -200,7 +205,8 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 	if (pos.m_blackToMove) {
 		moveB1 = ((friendlyPawnsBitboard & ~colBitmask[0]) >> 9) & (pos.m_whiteAllPiecesBitboard | epBitboard1);
 		moveB2 = ((friendlyPawnsBitboard & ~colBitmask[7]) >> 7) & (pos.m_whiteAllPiecesBitboard | epBitboard2);
-	} else {
+	}
+	else {
 		moveB1 = ((friendlyPawnsBitboard & ~colBitmask[0]) << 7) & (pos.m_blackAllPiecesBitboard | epBitboard1);
 		moveB2 = ((friendlyPawnsBitboard & ~colBitmask[7]) << 9) & (pos.m_blackAllPiecesBitboard | epBitboard2);
 	}
@@ -209,9 +215,9 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 		moveB2 &= tileBlocksCheck | epBitboard2;
 	}
 	shiftPawns = (pos.m_blackToMove ? -8 : 8) - 1;
-	ans += extractPawnMovesFromBitmask(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
+	ans += extractPawnMovesFromBitmask<capturesOnly>(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
 	shiftPawns = (pos.m_blackToMove ? -8 : 8) + 1;
-	ans += extractPawnMovesFromBitmask(out, ans, moveB2, shiftPawns, 0, pos.m_blackToMove);
+	ans += extractPawnMovesFromBitmask<capturesOnly>(out, ans, moveB2, shiftPawns, 0, pos.m_blackToMove);
 	return ans - moveStIdx;
 }
 
@@ -290,7 +296,8 @@ inline void getPinsAndChecks(const Position& pos) {
 			inCheck = 1;
 			tileBlocksCheck |= betweenBitboard[kingPos][piecePos];
 			tileBlocksCheck |= 1ULL << piecePos;
-		} else {
+		}
+		else {
 			//If only one piece in between sliding piece and 
 			if ((pcsBetween & pcsBetween - 1) == 0) {
 				//Here we never check if piece is friendly, but doesn't matter, because we won't try move it anyway
@@ -331,8 +338,9 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx
 	const uint64_t friendlyPcsBB = (pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
 	int8_t enemyNonPawnPcs = (pos.m_blackToMove ? pos.m_whiteTotalPiecesCnt - pos.m_whitePiecesCnt[PAWN] : pos.m_blackTotalPiecesCnt - pos.m_blackPiecesCnt[PAWN]);
 	int8_t kingMoves = kingMovesCnt(friendlyPiece[0]->pos, friendlyPcsBB);
-		// * 4 is an estimate of how many operations attackersToSq will do for every king move (we neglect castling)
+	// * 4 is an estimate of how many operations attackersToSq will do for every king move (we neglect castling)
 	bool betterToUseAttackedTiles = enemyNonPawnPcs <= (kingMoves * 4);
+	//|| capturesOnly, because there won't be many captures with the king
 	if (!betterToUseAttackedTiles || capturesOnly) {
 		getPinsAndChecks<0>(pos);
 		movesCnt += generateKingMoves<capturesOnly, 0>(pos, out, movesCnt);
@@ -344,10 +352,13 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx
 		return movesCnt - outStIdx;
 	}
 	//Pawns
+	//We choose this order of creating moves (least valuable pieces -> most valuable pieces)
+	//in order to increase alpha-beta pruning, because searching first least valuable
+	//gives a value to alpha/beta and we can reject blunders faster
 	movesCnt += generatePawnMoves<capturesOnly>(pos, out, movesCnt);
 	movesCnt += generatePieceMoves<KNIGHT, capturesOnly>(pos, out, movesCnt);
-	movesCnt += generatePieceMoves<QUEEN, capturesOnly>(pos, out, movesCnt);
-	movesCnt += generatePieceMoves<ROOK, capturesOnly>(pos, out, movesCnt);
 	movesCnt += generatePieceMoves<BISHOP, capturesOnly>(pos, out, movesCnt);
+	movesCnt += generatePieceMoves<ROOK, capturesOnly>(pos, out, movesCnt);
+	movesCnt += generatePieceMoves<QUEEN, capturesOnly>(pos, out, movesCnt);
 	return movesCnt - outStIdx;
 }
