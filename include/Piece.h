@@ -22,10 +22,6 @@ public:
 	~Piece();
 
 	void setPos(int8_t pos_);
-	inline bool getMovesInDir(int8_t dirIdx) {
-		return (!(dirIdx & 1) && (type == PieceType::QUEEN || type == PieceType::BISHOP)) ||
-			((dirIdx & 1) && (type == PieceType::QUEEN || type == PieceType::ROOK));
-	}
 
 	int8_t pos;		//readOnly
 	int8_t x;		//readOnly

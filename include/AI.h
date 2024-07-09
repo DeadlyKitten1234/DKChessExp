@@ -20,9 +20,10 @@ public:
 
 	int16_t bestMove;
 
+	//Warning: pos is referece => changes made by the AI will impact the original position
 	Position* pos;
 };
-
+#include <iostream>
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth == 0) {
@@ -31,24 +32,24 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
-	if (foundTTEntry && ttEntryRes->depth >= depth) {
-		//If lower bound
-		if (ttEntryRes->boundType() == BoundType::LowBound) {
-			alpha = max(alpha, ttEntryRes->eval);
-			if (alpha >= beta) {
-				ttEntryRes->setGen(tt.gen);
-				return beta;
-			}
-		}
-		//If exact bound => renew gen and return eval
-		if (ttEntryRes->boundType() == BoundType::Exact) {
-			ttEntryRes->setGen(tt.gen);
-			if constexpr (root) {
-				bestMove = ttEntryRes->bestMove;
-			}
-			return ttEntryRes->eval;
-		}
-	}
+	//if (foundTTEntry && ttEntryRes->depth >= depth) {
+	//	//If lower bound
+	//	if (ttEntryRes->boundType() == BoundType::LowBound) {
+	//		alpha = max(alpha, ttEntryRes->eval);
+	//		if (alpha >= beta) {
+	//			ttEntryRes->setGen(tt.gen);
+	//			return beta;
+	//		}
+	//	}
+	//	//If exact bound => renew gen and return eval
+	//	if (ttEntryRes->boundType() == BoundType::Exact) {
+	//		ttEntryRes->setGen(tt.gen);
+	//		if constexpr (root) {
+	//			bestMove = ttEntryRes->bestMove;
+	//		}
+	//		return ttEntryRes->eval;
+	//	}
+	//}
 
 	pos->updateLegalMoves<0>();
 	int16_t movesCnt = pos->m_legalMovesCnt;
@@ -59,20 +60,24 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
+	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt/*, (foundTTEntry ? ttEntryRes->bestMove : nullMove)*/);
 
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
 		int8_t capturedPieceIdx = pos->makeMove(moves[i]);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
-		int res = -search<0>(depth - 1, -beta, -alpha);
+		int16_t res = -search<0>(depth - 1, -beta, -alpha);
+		if (root) {//Temporary
+			printName(moves[i]);
+			std::cout << ": " << res << '\n';
+		}
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		if (res >= beta) {
 			ttEntryRes->init(pos->zHash, moves[i], res, depth, tt.gen, BoundType::LowBound);
-			pos->m_legalMovesCnt = movesCnt;
 			if constexpr (root) {
+				pos->m_legalMovesCnt = movesCnt;
 				bestMove = moves[i];
 			}
 			return beta;
@@ -84,7 +89,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			alpha = res;
 		}
 	}
-	pos->m_legalMovesCnt = movesCnt;
+	if constexpr (root) {
+		pos->m_legalMovesCnt = movesCnt;
+	}
 	//No alpha-beta cutoff occured
 	ttEntryRes->init(pos->zHash, bestMove, alpha, depth, tt.gen, BoundType::Exact);
 	return alpha;
@@ -112,10 +119,10 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		int16_t res = -searchOnlyCaptures(-beta, -alpha);
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
-		if (eval >= beta) {
+		if (res >= beta) {
 			return beta;
 		}
-		alpha = max(alpha, eval);
+		alpha = max(alpha, res);
 	}
 	return alpha;
 }
