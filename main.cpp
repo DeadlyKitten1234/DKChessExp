@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
     AI testAI;
     testAI.initPos(pos);
     long stTime = clock();
-    std::cout << testAI.search(5, -pieceValue[KING], pieceValue[KING]) << ' ';
+    std::cout << testAI.search(6, -pieceValue[KING], pieceValue[KING]) << ' ';
     printName(testAI.bestMove);
     std::cout << " Time: " << clock() - stTime << '\n';
 
