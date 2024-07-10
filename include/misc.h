@@ -32,6 +32,7 @@ inline int8_t countOnes(uint64_t bitmask) {
 inline uint64_t shift(uint64_t number, int8_t amount) {
 	return (amount < 0 ? number >> (-amount) : number << amount);
 }
+void reverseFenPosition(char* fen);
 
 class RandNumGen {
 public:
