@@ -55,14 +55,17 @@ int main(int argc, char* argv[]) {
     world.init();    
 
     Position* pos = new Position();
-    pos->readFEN("1k2q3/1pp5/1pn3p1/6Pp/P3b2P/1PN5/1BP2Q2/1K6 w - - 0 1");
-    //pos->readFEN(Position::m_startFEN);
+    pos->readFEN("");
+    //pos->makeMove(getMoveFromText("g5f6"));
+    //pos->makeMove(getMoveFromText("g7f6"));
+    //pos->makeMove(getMoveFromText("h7f7"));
+    //pos->makeMove(getMoveFromText("f8f7"));
     world.m_board.initPos(pos);
 
     AI testAI;
     testAI.initPos(pos);
     long stTime = clock();
-    std::cout << testAI.search(6, -pieceValue[KING], pieceValue[KING]) << ' ';
+    std::cout << testAI.search(8, -pieceValue[KING], pieceValue[KING]) << ' ';
     printName(testAI.bestMove);
     std::cout << " Time: " << clock() - stTime << '\n';
 

@@ -1,5 +1,6 @@
 #include <iostream>
 #include "Move.h"
+#include "misc.h"
 #include "PrecomputedData.h"
 
 inline int16_t createMove(const int8_t stPos, const int8_t endPos, const PieceType promotionPiece) {
@@ -22,4 +23,8 @@ void printName(int16_t move) {
 	if (getPromotionPiece(move) != PieceType::UNDEF) {
 		std::cout << getCharFromType(getPromotionPiece(move));
 	}
+}
+
+int16_t getMoveFromText(std::string move) {
+	return createMove(move[0] - 'a' + (move[1] - '1') * 8, move[2] - 'a' + (move[3] - '1') * 8, (move.size() > 4 ? getTypeFromChar(move[4])  : UNDEF));
 }

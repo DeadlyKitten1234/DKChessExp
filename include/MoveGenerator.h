@@ -151,8 +151,7 @@ inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint
 						break;
 					}
 				}
-			}
-			else {
+			} else {
 				out[ans++] = createMove(stPos, pos);
 			}
 		}

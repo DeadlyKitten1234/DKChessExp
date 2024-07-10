@@ -2,6 +2,7 @@
 #include "Piece.h"
 #include <cmath>
 #include <cinttypes>
+#include <string>
 
 const int16_t nullMove = 0x6000;
 
@@ -12,3 +13,4 @@ extern inline int8_t getEndPos(int16_t move);
 extern inline PieceType getPromotionPiece(int16_t move);
 
 extern void printName(int16_t move);
+extern int16_t getMoveFromText(std::string move);

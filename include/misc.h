@@ -32,3 +32,14 @@ inline int8_t countOnes(uint64_t bitmask) {
 inline uint64_t shift(uint64_t number, int8_t amount) {
 	return (amount < 0 ? number >> (-amount) : number << amount);
 }
+
+class RandNumGen {
+public:
+	RandNumGen();
+	RandNumGen(uint64_t seed_);
+
+	uint64_t rand();
+
+private:
+	uint64_t seed;
+};

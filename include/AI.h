@@ -23,7 +23,7 @@ public:
 	//Warning: pos is referece => changes made by the AI will impact the original position
 	Position* pos;
 };
-#include <iostream>
+
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth == 0) {

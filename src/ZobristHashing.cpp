@@ -1,37 +1,28 @@
 #include "ZobristHashing.h"
-#include <random>
+#include "misc.h"
 uint64_t hashNums[64][2][6];//[Square][Color][PieceType]
 uint64_t hashNumsCastling[16];
 uint64_t hashNumsEp[8];//En passant
 uint64_t hashNumBlackToMove = 0;
 
-uint64_t genRandInt64(std::default_random_engine& RNG, std::uniform_int_distribution<int>& bitDistribution) {
-	uint64_t ans = 0;
-	for (int i = 0; i < 64; i++) {
-		ans += bitDistribution(RNG);
-		ans <<= 1;
-	}
-	return ans;
-}
-
 void populateHashNums() {
-	//Some magic to generate random numbers
-	std::default_random_engine RNG(25146);
-	std::uniform_int_distribution<int> bitDistribution(0, 1);
+	//Both seed and random number generation have been taken from stockfish
+	RandNumGen rng(1070372);
+
 	for (int sq = 0; sq < 64; sq++) {
 		for (int color = 0; color < 2; color++) {
 			for (int type = 0; type < 6; type++) {
-				hashNums[sq][color][type] = genRandInt64(RNG, bitDistribution);
+				hashNums[sq][color][type] = rng.rand();
 			}
 		}
 	}
 	for (int i = 0; i < 16; i++) {
-		hashNumsCastling[i] = genRandInt64(RNG, bitDistribution);
+		hashNumsCastling[i] = rng.rand();
 	}
 	for (int i = 0; i < 8; i++) {
-		hashNumsEp[i] = genRandInt64(RNG, bitDistribution);
+		hashNumsEp[i] = rng.rand();
 	}
-	hashNumBlackToMove = genRandInt64(RNG, bitDistribution);
+	hashNumBlackToMove = rng.rand();
 }
 
 uint64_t getPositionHash(const Position& pos) {
