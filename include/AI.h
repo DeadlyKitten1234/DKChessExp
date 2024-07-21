@@ -1,6 +1,7 @@
 #pragma once
 #include "Position.h"
 #include "TranspositionTable.h"
+#include <iostream>
 #include <algorithm>//for max and min
 using std::max;
 using std::min;
@@ -30,20 +31,32 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		return searchOnlyCaptures(alpha, beta);
 	}
 	
+	int16_t curBestMove = nullMove;
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	if (foundTTEntry && ttEntryRes->depth >= depth) {
-		//If lower bound
+		//Renew gen (aka make it more valuable when deciding which entry to overwrite)
+		ttEntryRes->setGen(tt.gen);
+		//Lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
-			alpha = max(alpha, ttEntryRes->eval);
-			if (alpha >= beta) {
-				ttEntryRes->setGen(tt.gen);
+			if (ttEntryRes->eval > alpha || ttEntryRes->eval >= beta) {
+				if constexpr (root) {
+					bestMove = ttEntryRes->bestMove;
+				}
+				curBestMove = ttEntryRes->bestMove;
+			}
+			if (ttEntryRes->eval >= beta) {
 				return beta;
 			}
+			alpha = max(alpha, ttEntryRes->eval);
+		}
+
+		//Higher bound
+		if (ttEntryRes->boundType() == BoundType::HighBound) {
+
 		}
 		//If exact bound => renew gen and return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
-			ttEntryRes->setGen(tt.gen);
 			if constexpr (root) {
 				bestMove = ttEntryRes->bestMove;
 			}
@@ -60,8 +73,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt/*, (foundTTEntry ? ttEntryRes->bestMove : nullMove)*/);
+	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, (foundTTEntry && ttEntryRes->depth >= 2 ? ttEntryRes->bestMove : nullMove));
 
+	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is acihieved
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
@@ -70,6 +84,18 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		int16_t res = -search<0>(depth - 1, -beta, -alpha);
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+		//Temporary
+		if (root) {
+			std::cout << "Evaluating ";
+			printName(moves[i]);
+			std::cout << ": " << res << "; Alpha: " << alpha << "; Beta: " << beta << '\n';
+		}
+
+		//If mate ? decrease value with depth
+		if (res > pieceValue[KING] - 100) {
+			res--;
+		}
+		//Alpha-beta cutoff
 		if (res >= beta) {
 			ttEntryRes->init(pos->zHash, moves[i], res, depth, tt.gen, BoundType::LowBound);
 			if constexpr (root) {
@@ -78,18 +104,21 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			}
 			return beta;
 		}
+		//Best move
 		if (res > alpha) {
 			if constexpr (root) {
 				bestMove = moves[i];
 			}
+			curBestMove = moves[i];
 			alpha = res;
+			failLow = 0;
 		}
 	}
 	if constexpr (root) {
 		pos->m_legalMovesCnt = movesCnt;
 	}
 	//No alpha-beta cutoff occured
-	ttEntryRes->init(pos->zHash, bestMove, alpha, depth, tt.gen, BoundType::Exact);
+	ttEntryRes->init(pos->zHash, curBestMove, alpha, depth, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
 	return alpha;
 }
 
@@ -101,7 +130,25 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		return beta;
 	}
 	alpha = max(alpha, eval);
-	//here need to add if seen in tptable
+	//Only read from tt, because evaluating only captures
+	bool foundTTEntry = 0;
+	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
+	if (foundTTEntry && ttEntryRes->depth >= 2) {
+		//If lower bound
+		if (ttEntryRes->boundType() == BoundType::LowBound) {
+			if (ttEntryRes->eval >= beta) {
+				ttEntryRes->setGen(tt.gen);
+				return beta;
+			}
+			alpha = max(alpha, ttEntryRes->eval);
+		}
+		//If exact bound => renew gen and return eval
+		if (ttEntryRes->boundType() == BoundType::Exact) {
+			ttEntryRes->setGen(tt.gen);
+			return ttEntryRes->eval;
+		}
+	}
+
 	pos->updateLegalMoves<1>();
 	int16_t movesCnt = pos->m_legalMovesCnt;
 	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt);
@@ -128,6 +175,14 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t ttBestMove)
 	//no need to complicate things with if (black) {} everywhere
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
 	const int8_t enemyKingPos = (pos->m_blackToMove ? pos->m_whitePiece[0]->pos : pos->m_blackPiece[0]->pos);
+	uint64_t checksToKing[6] = {
+		attacks<KING>	(enemyKingPos, allPcs),
+		attacks<QUEEN>	(enemyKingPos, allPcs),
+		attacks<BISHOP>	(enemyKingPos, allPcs),
+		attacks<KNIGHT>	(enemyKingPos, allPcs),
+		attacks<ROOK>	(enemyKingPos, allPcs),
+		0/*maybe later add pawns*/
+	};
 	for (int16_t i = startIdx; i < endIdx; i++) {
 		int maxGuess = -pieceValue[KING], maxGuessIdx = -1;
 		for (int16_t j = i; j < endIdx; j++) {
@@ -141,13 +196,18 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t ttBestMove)
 				//13 is the lowest number above how much pawns a queen is worth
 				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pos->m_pieceOnTile[stPos]->type];
 			}
+			//If tile attacked by opponent pawn
+			if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
+				curGuess -= pieceValue[pos->m_pieceOnTile[stPos]->type] >> 1;
+			}
+
 			//Promoting is good
 			if (getPromotionPiece(curMove) != UNDEF) {
 				curGuess += pieceValue[getPromotionPiece(curMove)];
 			}
 			//Favor checks slightly
 			PieceType type = pos->m_pieceOnTile[stPos]->type;
-			if (attacks(type, enemyKingPos, allPcs) & (1ULL << endPos)) {
+			if (checksToKing[type] & (1ULL << endPos)) {
 				curGuess += 85;
 			}
 

@@ -9,18 +9,21 @@ void populateHashNums() {
 	//Both seed and random number generation have been taken from stockfish
 	RandNumGen rng(1070372);
 
-	for (int sq = 0; sq < 64; sq++) {
-		for (int color = 0; color < 2; color++) {
-			for (int type = 0; type < 6; type++) {
-				hashNums[sq][color][type] = rng.rand();
-			}
-		}
-	}
-	for (int i = 0; i < 16; i++) {
-		hashNumsCastling[i] = rng.rand();
+	for (int color = 0; color < 2; color++) {
+		//Use this order, because stockfish does
+		for (int sq = 0; sq < 64; sq++) { hashNums[sq][color][PAWN] = rng.rand(); }
+		for (int sq = 0; sq < 64; sq++) { hashNums[sq][color][KNIGHT] = rng.rand(); }
+		for (int sq = 0; sq < 64; sq++) { hashNums[sq][color][BISHOP] = rng.rand(); }
+		for (int sq = 0; sq < 64; sq++) { hashNums[sq][color][ROOK] = rng.rand(); }
+		for (int sq = 0; sq < 64; sq++) { hashNums[sq][color][QUEEN] = rng.rand(); }
+		for (int sq = 0; sq < 64; sq++) { hashNums[sq][color][KING] = rng.rand(); }
+		
 	}
 	for (int i = 0; i < 8; i++) {
 		hashNumsEp[i] = rng.rand();
+	}
+	for (int i = 0; i < 16; i++) {
+		hashNumsCastling[i] = rng.rand();
 	}
 	hashNumBlackToMove = rng.rand();
 }

@@ -81,6 +81,9 @@
     <ClCompile Include="..\src\misc.cpp">
       <Filter>Misc</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\GameManager.cpp">
+      <Filter>UI and Input</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\MoveGenerator.h">
@@ -130,6 +133,9 @@
     </ClInclude>
     <ClInclude Include="..\include\misc.h">
       <Filter>Misc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\GameManager.h">
+      <Filter>UI and Input</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

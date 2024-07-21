@@ -15,18 +15,14 @@ World::~World() {}
 void World::init() {
 	m_presenter.init();
 	m_backgroundTexture = loadTexture("Background", Presenter::m_mainRenderer);
-	m_board.init();
+	m_gameManager.init();
+
+	m_gameManager.setAI(0, 1);
 }
 
 void World::update() {
 	m_input.getInput();
-	if (m_input.m_mouseDown) {
-		m_board.selectPiece(m_input.m_mouseCoord);
-		//generateMoves(m_board.m_pos);
-	}
-	if (m_input.m_mouseUp) {
-		m_board.dropPiece(m_input.m_mouseCoord, getTypeFromChar(m_input.keyPressed));
-	}
+	m_gameManager.update(m_input);
 	if (m_input.m_quit) {
 		quit = 1;
 		return;
@@ -35,6 +31,6 @@ void World::update() {
 
 void World::draw() {
 	Presenter::drawObject(m_backgroundTexture);
-	m_board.draw(m_input.m_mouseCoord);
+	m_gameManager.m_board.draw(m_input.m_mouseCoord);
 	m_presenter.draw();
 }

@@ -45,7 +45,7 @@ void GraphicBoard::init() {
 	}
 }
 
-void GraphicBoard::initPos(Position* pos) {
+void GraphicBoard::initPos(Position*  pos) {
 	m_pos = pos;
 }
 
@@ -118,7 +118,7 @@ void GraphicBoard::selectPiece(int2 mouseCoords) {
 	}
 }
 
-void GraphicBoard::dropPiece(int2 mouseCoords, PieceType promotionType) {
+int16_t GraphicBoard::dropPiece(int2 mouseCoords) {
 	m_draggingSelectedPiece = 0;
 	int tileSz = m_boardSizePx / 8;
 	int boardStX = (Presenter::m_SCREEN_WIDTH - m_boardSizePx) / 2;
@@ -128,21 +128,15 @@ void GraphicBoard::dropPiece(int2 mouseCoords, PieceType promotionType) {
 			int tileX = (mouseCoords.x - boardStX) / tileSz;
 			int tileY = (boardStY + tileSz - mouseCoords.y) / tileSz;
 			if (m_legalMoveTile[tileX + 8 * tileY]) {
-				int16_t move = m_legalMoveTile[tileX + 8 * tileY];
-				//Check if promotion
-				if (m_pos->m_pieceOnTile[getStartPos(move)]->type == PieceType::PAWN) {
-					if (getY(getEndPos(move)) == (m_pos->m_blackToMove ? 0 : 7)) {
-						move = createMove(getStartPos(move), getEndPos(move), (promotionType == UNDEF ? QUEEN : promotionType));
-					}
-				}
-				m_pos->makeMove(move);
+				int16_t ans = createMove(m_selectedPiecePos, tileX + 8 * tileY);
 				//Reset selection and update legal moves
 				m_selectedPiecePos = -1;
 				for (int i = 0; i < 64; i++) {
 					m_legalMoveTile[i] = 0;
 				}
-				m_pos->updateLegalMoves<0>();
+				return ans;
 			}
 		}
 	}
+	return nullMove;
 }

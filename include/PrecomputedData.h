@@ -77,25 +77,6 @@ inline uint64_t attacks(const int8_t sq, const uint64_t blockers) {
 			   rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
 	}
 }
-//Preferably use the template<type> attacks, because its faster
-inline uint64_t attacks(PieceType type, const int8_t sq, const uint64_t blockers) {
-	if (type == KNIGHT) {
-		return knightMovesLookup[sq];
-	}
-	if (type == KING) {
-		return kingMovesLookup[sq];
-	}
-	if (type == BISHOP) {
-		return bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)];
-	}
-	if (type == ROOK) {
-		return rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
-	}
-	if (type == QUEEN) {
-		return bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)] |
-			rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
-	}
-}
 
 inline int8_t kingMovesCnt(const int8_t pos, const uint64_t friendlyBB) {
 	return kingMovesCntLookup[pos][((friendlyBB & kingMovesLookup[pos]) * kingMagic[pos]) >> 56];

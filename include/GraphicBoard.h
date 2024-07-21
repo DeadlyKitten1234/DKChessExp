@@ -17,7 +17,7 @@ public:
 	void draw(int2 mouseCoords);
 
 	void selectPiece(int2 mouseCoords);
-	void dropPiece(int2 mouseCoords, PieceType promotionType = PieceType::UNDEF);
+	int16_t dropPiece(int2 mouseCoords);//Returns move if legal
 
 	static SDL_Texture* m_possibleMoveTexture;
 	static SDL_Texture* m_captureTexture;

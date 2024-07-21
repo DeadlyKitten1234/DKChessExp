@@ -1,4 +1,3 @@
-#include <algorithm>
 #include "Position.h"
 #include "PrecomputedData.h"
 #include "ZobristHashing.h"
@@ -25,8 +24,10 @@ Position::Position() {
 	m_blackBitboards = nullptr;
 	m_legalMovesCnt = 0;
 	friendlyInCheck = 0;
-	m_piecesEval = 0;
+	m_whitePiecesEval = 0;
+	m_blackPiecesEval = 0;
 	zHash = 0;
+	enemyPawnAttacksBitmask = 0;
 }
 
 Position::~Position() {
@@ -50,7 +51,8 @@ void Position::readFEN(const char* fen) {
 	m_blackTotalPiecesCnt = 0;
 	m_bitmaskCastling = 0;
 	m_blackToMove = 0;
-	m_piecesEval = 0;
+	m_whitePiecesEval = 0;
+	m_blackPiecesEval = 0;
 	int8_t xPos = 0;
 	int8_t yPos = 7;
 	int i = 0;
@@ -91,26 +93,27 @@ void Position::readFEN(const char* fen) {
 			//If king => swap with first so king is always with idx 0
 			if (type == PieceType::KING) {
 				swap(m_whitePiece[0], m_whitePiece[m_whiteTotalPiecesCnt]);
+			} else {
+				//Add to eval
+				m_whitePiecesEval += pieceValue[type];
 			}
-			//Add to eval
-			m_piecesEval += pieceValue[type];
 			//Increase count
 			m_whiteTotalPiecesCnt++;
 			m_whitePiecesCnt[type]++;
 			//Bitboards
 			m_whiteAllPiecesBitboard |= (1ULL << (xPos + 8 * yPos));
 			m_whiteBitboards[type] |= (1ULL << (xPos + 8 * yPos));
-		}
-		else {
+		} else {
 			PieceType type = getTypeFromChar(fen[i]);
 			m_blackPiece[m_blackTotalPiecesCnt] = new Piece(xPos, yPos, type, 1);
 			m_pieceOnTile[xPos + 8 * yPos] = m_blackPiece[m_blackTotalPiecesCnt];
 			//If king => swap with first so king is always with idx 0
 			if (type == PieceType::KING) {
 				swap(m_blackPiece[0], m_blackPiece[m_blackTotalPiecesCnt]);
+			} else {
+				//Add to eval
+				m_blackPiecesEval += pieceValue[type];
 			}
-			//Add to eval (subtract, because good for black = bad for white)
-			m_piecesEval -= pieceValue[type];
 			//Increase count
 			m_blackTotalPiecesCnt++;
 			m_blackPiecesCnt[type]++;
@@ -182,6 +185,10 @@ int8_t Position::makeMove(int16_t move) {
 		m_whiteBitboards[type] &= ~(1ULL << stTile);
 		m_whiteBitboards[type] |= (1ULL << endTile);
 	}
+	//Update zobrist hash
+	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[stTile]->type];
+	zHash ^= hashNums[endTile][m_blackToMove][m_pieceOnTile[stTile]->type];
+	zHash ^= hashNumBlackToMove;
 	//If castle
 	if (m_pieceOnTile[stTile]->type == PieceType::KING && abs(stTile - endTile) == 2) {
 		int8_t addRookPos = (stTile > endTile ? 1 : -1);
@@ -238,13 +245,13 @@ int8_t Position::makeMove(int16_t move) {
 			m_blackBitboards[promotionType] |= (1ULL << endTile);
 			m_blackPiecesCnt[promotionType]++;
 			m_blackPiecesCnt[PAWN]--;
-			m_piecesEval -= pieceValue[promotionType] - pieceValue[PAWN];// -=, because good for black = bad for white
+			m_blackPiecesEval += pieceValue[promotionType] - pieceValue[PAWN];
 		} else {
 			m_whiteBitboards[PAWN] &= ~(1ULL << endTile);
 			m_whiteBitboards[promotionType] |= (1ULL << endTile);
 			m_whitePiecesCnt[promotionType]++;
 			m_whitePiecesCnt[PAWN]--;
-			m_piecesEval += pieceValue[promotionType] - pieceValue[PAWN];
+			m_whitePiecesEval += pieceValue[promotionType] - pieceValue[PAWN];
 		}
 		//Update zobrist hash
 		zHash ^= hashNums[endTile][m_blackToMove][PAWN];
@@ -268,13 +275,13 @@ int8_t Position::makeMove(int16_t move) {
 					m_whitePiecesCnt[type]--;
 					m_whiteBitboards[type] &= ~(1ULL << captureTile);
 					m_whiteAllPiecesBitboard &= ~(1ULL << captureTile);
-					m_piecesEval -= pieceValue[type];
+					m_whitePiecesEval -= pieceValue[type];
 				} else {
 					m_blackTotalPiecesCnt--;
 					m_blackPiecesCnt[type]--;
 					m_blackBitboards[type] &= ~(1ULL << captureTile);
 					m_blackAllPiecesBitboard &= ~(1ULL << captureTile);
-					m_piecesEval += pieceValue[type];
+					m_blackPiecesEval -= pieceValue[type];
 				}
 				swap(enemyPiece[i], enemyPiece[enemyPieceCnt - 1]);
 				capturedPieceIdx = i;
@@ -303,10 +310,6 @@ int8_t Position::makeMove(int16_t move) {
 		}
 	}
 
-	//Update zobrist hash
-	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[stTile]->type];
-	zHash ^= hashNums[endTile][m_blackToMove][m_pieceOnTile[stTile]->type];
-	zHash ^= hashNumBlackToMove;
 	//Set pieces on tiles
 	m_pieceOnTile[stTile]->setPos(endTile);
 	m_pieceOnTile[endTile] = m_pieceOnTile[stTile];
@@ -356,13 +359,13 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 			m_blackBitboards[promotionType] &= ~(1ULL << stTile);
 			m_blackPiecesCnt[promotionType]--;
 			m_blackPiecesCnt[PAWN]++;
-			m_piecesEval -= pieceValue[PAWN] - pieceValue[promotionType];
+			m_blackPiecesEval += pieceValue[PAWN] - pieceValue[promotionType];
 		} else {
 			m_whiteBitboards[PAWN] |= (1ULL << stTile);
 			m_whiteBitboards[promotionType] &= ~(1ULL << stTile);
 			m_whitePiecesCnt[promotionType]--;
 			m_whitePiecesCnt[PAWN]++;
-			m_piecesEval += pieceValue[PAWN] - pieceValue[promotionType];
+			m_whitePiecesEval += pieceValue[PAWN] - pieceValue[promotionType];
 		}
 		//Update zobrist hash
 		zHash ^= hashNums[endTile][m_blackToMove][promotionType];
@@ -391,15 +394,15 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		zHash ^= hashNums[rookStTile][m_blackToMove][ROOK];
 		zHash ^= hashNums[rookEndTile][m_blackToMove][ROOK];
 	}
+	//Update zobrist hash; important to do this AFTER reverting promotions to have correct hash
+	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[endTile]->type];
+	zHash ^= hashNums[endTile][m_blackToMove][m_pieceOnTile[endTile]->type];
 	//Update pieceOnTile;
 	//its important to do it before undo-ing
 	//captures to not overwrite piece with captured one
 	m_pieceOnTile[endTile]->setPos(stTile);
 	m_pieceOnTile[stTile] = m_pieceOnTile[endTile];
 	m_pieceOnTile[endTile] = nullptr;
-	//Update zobrist hash
-	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[stTile]->type];
-	zHash ^= hashNums[endTile][m_blackToMove][m_pieceOnTile[stTile]->type];
 
 	//Undo captures
 	int8_t captureTile = endTile;
@@ -418,13 +421,13 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 			m_whitePiecesCnt[type]++;
 			m_whiteBitboards[type] |= (1ULL << captureTile);
 			m_whiteAllPiecesBitboard |= (1ULL << captureTile);
-			m_piecesEval += pieceValue[type];
+			m_whitePiecesEval += pieceValue[type];
 		} else {
 			m_blackTotalPiecesCnt++;
 			m_blackPiecesCnt[type]++;
 			m_blackBitboards[type] |= (1ULL << captureTile);
 			m_blackAllPiecesBitboard |= (1ULL << captureTile);
-			m_piecesEval -= pieceValue[type];
+			m_blackPiecesEval += pieceValue[type];
 		}
 		//Update zobrist hash
 		zHash ^= hashNums[captureTile][!m_blackToMove][type];

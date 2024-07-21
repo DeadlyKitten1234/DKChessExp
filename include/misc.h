@@ -38,6 +38,7 @@ class RandNumGen {
 public:
 	RandNumGen();
 	RandNumGen(uint64_t seed_);
+	~RandNumGen() {}
 
 	uint64_t rand();
 

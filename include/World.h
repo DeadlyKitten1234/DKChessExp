@@ -1,7 +1,7 @@
 #pragma once
 #include "SDL.h"
 #include "Presenter.h"
-#include "GraphicBoard.h"
+#include "GameManager.h"
 #include "InputManager.h"
 
 class World {
@@ -10,14 +10,15 @@ public:
 	~World();
 
 	void init();
+	void initPos(Position* pos_) { m_gameManager.initPos(pos_); pos_->updateLegalMoves<0>(); };
 	void update();
 	void draw();
 
 	static SDL_Texture* m_backgroundTexture;
 	bool quit;
-	GraphicBoard m_board;
 
 private:
 	Presenter m_presenter;
 	InputManager m_input;
+	GameManager m_gameManager;
 };

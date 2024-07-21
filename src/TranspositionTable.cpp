@@ -22,19 +22,19 @@ void TranspositionTable::setSize(const int sizeMB) {
 	}
 
 	chunksCnt = sizeMB * 1024 * 1024 / chunkSz;
-	shRVal = 64 - (getLSBPos(sizeMB) + 10 + 10 - getLSBPos(chunkSz));
+	shRVal = 64 - getLSBPos(chunksCnt);
 	chunk = new TTEntryChunk[chunksCnt]();
-
 	clear();
 }
 
 void TranspositionTable::clear() {
+	gen = 0;
 	for (int i = 0; i < chunksCnt; i++) {
 		std::memset(&chunk[i], 0, chunkSz);
 	}
 }
 
-TTEntry* TranspositionTable::find(uint64_t key, bool& found) const {
+TTEntry* TranspositionTable::find(const uint64_t key, bool& found) const {
 	TTEntry* entriesInChunk = chunk[(key >> shRVal)].entry;
 	for (int8_t i = 0; i < 3; i++) {
 		if (entriesInChunk[i].sameKey(key)) {
@@ -42,7 +42,6 @@ TTEntry* TranspositionTable::find(uint64_t key, bool& found) const {
 			return &entriesInChunk[i];
 		}
 	}
-	found = 0;
 	//Even if key hasn't been found, return the least valuable entry to be replaced
 	int16_t maxValue = -1;
 	TTEntry* ans = nullptr;
@@ -51,10 +50,11 @@ TTEntry* TranspositionTable::find(uint64_t key, bool& found) const {
 		if (entriesInChunk[i].gen() > gen) {
 			val -= 0x100;
 		}
-		if (val >= maxValue) {
+		if (val > maxValue) {
 			maxValue = val;
 			ans = &entriesInChunk[i];
 		}
 	}
+	found = 0;
 	return ans;
 }

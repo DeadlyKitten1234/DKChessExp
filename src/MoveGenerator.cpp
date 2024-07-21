@@ -7,3 +7,4 @@ uint64_t tilePinnedBitmask = 0;
 int8_t nullPinnedDir = -1;
 bool inCheck = 0;
 bool inDoubleCheck = 0;
+uint64_t pawnAtt = 0;

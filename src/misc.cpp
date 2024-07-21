@@ -17,14 +17,6 @@ void reverseFenPosition(char* fen) {
 		int stVal = i;
 		tempRows[rowNum] = new char[8]();
 		while (fen[i] != '/' && fen[i] != ' ') {
-			//Change pieces color
-			if ('a' <= fen[i] && fen[i] <= 'z') {
-				fen[i] += 'A' - 'a';
-			} else {
-				if ('A' <= fen[i] && fen[i] <= 'Z') {
-					fen[i] += 'a' - 'A';
-				}
-			}
 			i++;
 		}
 		i--;
@@ -50,7 +42,11 @@ void reverseFenPosition(char* fen) {
 		for (int k = 0; k < 8 && tempRows[7 - j][k]; k++) {
 			fen[totalCnt++] = tempRows[7 - j][k];
 		}
-		fen[totalCnt++] = '/';
+		if (j == 7) {
+			fen[totalCnt++] = ' ';
+		} else {
+			fen[totalCnt++] = '/';
+		}
 	}
 
 	//for (int j = 0; j < 8; j++) {

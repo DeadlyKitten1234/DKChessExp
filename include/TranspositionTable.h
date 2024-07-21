@@ -3,7 +3,7 @@
 //Everywhere generation refers to the "index" of the current search using the tt
 //Higher generation means newer; We use generation to determine how much a given entry is "worth"
 
-enum BoundType {
+enum BoundType : int8_t {
 	BoundNULL = 0,
 	LowBound = 1,
 	HighBound = 2,
@@ -15,12 +15,12 @@ public:
 	TTEntry() { key1 = key2 = bestMove = eval = depth = genAndType = 0; }
 	~TTEntry() {}
 
-	void setGen(int8_t gen) { genAndType &= 3; genAndType |= gen << 3; }
-	void setBoundType(BoundType bType) { genAndType &= 0xF8; genAndType |= bType; }
-	uint8_t gen() { return genAndType & 0xF8; }
-	BoundType boundType() { return BoundType(genAndType & 3); }
-	bool sameKey(uint32_t key) {
-		return (((key >> 16) & 0xFFFF) == key1) && ((key & 0xFFFF) == key2);
+	void setGen(int8_t gen) { genAndType &= 7; genAndType |= gen << 3; }
+	void setBoundType(BoundType bType) { genAndType &= 0xFC; genAndType |= bType; }
+	uint8_t gen() const { return (genAndType & 0xF8) >> 3; }
+	BoundType boundType() const { return BoundType(genAndType & 3); }
+	bool sameKey(const uint64_t key_) const {
+		return (((key_ >> 16) & 0xFFFF) == key1) && ((key_ & 0xFFFF) == key2);
 	}
 	void init(uint64_t key_, int16_t bestMove_, int16_t eval_, uint8_t depth_, uint8_t gen_, BoundType type_) {
 		key1 = (key_ >> 16) & 0xFFFF;
@@ -69,7 +69,7 @@ public:
 	char garbageBytesSoSizeIs32Bytes[2];
 };
 
-const int8_t chunkSz = sizeof(TTEntryChunk);
+const uint8_t chunkSz = sizeof(TTEntryChunk);
 
 class TranspositionTable {
 public:
@@ -87,10 +87,10 @@ public:
 	void setSize(const int sizeMB);//Size must be a power of 2
 	void clear();
 
-	TTEntry* find(uint64_t key, bool& found) const;
+	TTEntry* find(const uint64_t key, bool& found) const;
 
 	int chunksCnt;
-	int shRVal;
+	int8_t shRVal;
 	TTEntryChunk* chunk;
 	uint8_t gen;//Must be < 32 to be able to put into Entry
 };

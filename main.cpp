@@ -17,15 +17,20 @@ MAXIMUM OPTIMISATIONS IS:
 -/O2; /Ob2; whatever(i use /Oi); /Ot; wahtever(i use No(/Oy-)); wahtever(i use No); /GL
 make sure to compile on x64
 TODO:
+    -fix
+    .transposition table collision?
+    .make it bring king closer
+    .if spam queens, they will be more valuable than mate, so do something?
+
     -change
     .make move ordering O(nlogn) sort
     .make more evaluations to ordering
 
     -add
-    .add evaluation add boards and king force to edge endgame score
+    .add bonuses for sq
+    .add draws by insufficient material and repetition of moves
     .add iterative deepening
     .add some tests? (take them from chess.com puzzles) in TestMaganer
-    .add draws by insufficient material and repetition of moves
 
     -read
     .<https://www.chessprogramming.org/CPW-Engine_search>
@@ -52,25 +57,17 @@ int main(int argc, char* argv[]) {
     Position::initLegalMoves();
     tt.setSize(16);
     initTests();
-    world.init();    
 
     Position* pos = new Position();
-    char* fen = new char[100]("RNBKQBNR/PPpPpPpq/8/p7/krbrbrb1/8/8/8 w - - 0 1");
-    reverseFenPosition(fen);
+    //char fen[] = "8/3KP3/8/8/8/7q/8/6k1 w - - 0 1";
+    //char fen[] =  "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
+    char fen[] = "8/3r4/3k4/8/8/3K4/8/8 b - - 0 1";
+    //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    //reverseFenPosition(fen);
     pos->readFEN(fen);
-    //pos->makeMove(getMoveFromText("g5f6"));
-    //pos->makeMove(getMoveFromText("g7f6"));
-    //pos->makeMove(getMoveFromText("h7f7"));
-    //pos->makeMove(getMoveFromText("f8f7"));
-    world.m_board.initPos(pos);
 
-    //AI testAI;
-    //testAI.initPos(pos);
-    //long stTime = clock();
-    //std::cout << testAI.search(8, -pieceValue[KING], pieceValue[KING]) << ' ';
-    //printName(testAI.bestMove);
-    //std::cout << " Time: " << clock() - stTime << '\n';
-
+    world.init();
+    world.initPos(pos);
     //runDebuggingTest(pos);
     //runPerft(*pos, 7);
     //runTests();

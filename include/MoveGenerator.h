@@ -12,6 +12,7 @@ extern uint64_t tileAttacked;//Used for faster king move generation in endgame
 extern int8_t nullPinnedDir;
 extern bool inCheck;
 extern bool inDoubleCheck;
+extern uint64_t pawnAtt;
 
 inline uint64_t attackersToSq(const Position& pos, int8_t sq, int8_t ignoreStTile = -1) {
 	uint64_t allBB = (pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard) & ~(1ULL << sq);
@@ -167,7 +168,6 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 	const uint64_t emptySq = ~(pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard);
 	uint64_t moveB1, moveB2;
 	int8_t shiftPawns = (pos.m_blackToMove ? -8 : 8);
-	if constexpr (!capturesOnly) {
 		//Regular and double move
 		if (pos.m_blackToMove) {
 			moveB1 = (friendlyPawnsBitboard >> 8) & emptySq;
@@ -181,9 +181,13 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 			moveB1 &= tileBlocksCheck;
 			moveB2 &= tileBlocksCheck;
 		}
+		if constexpr (capturesOnly) {
+			moveB1 &= rowBitmask[(pos.m_blackToMove ? 0 : 7)];
+		}
 		ans += extractPawnMovesFromBitmask<0>(out, ans, moveB1, shiftPawns, 0, pos.m_blackToMove);
-		ans += extractPawnMovesFromBitmask<0>(out, ans, moveB2, shiftPawns, 1, pos.m_blackToMove);
-	}
+		if constexpr (!capturesOnly) {
+			ans += extractPawnMovesFromBitmask<0>(out, ans, moveB2, shiftPawns, 1, pos.m_blackToMove);
+		}
 	//Captures
 	uint64_t epBitboard1 = 0;
 	uint64_t epBitboard2 = 0;
@@ -276,6 +280,7 @@ inline void getPinsAndChecks(const Position& pos) {
 	//Here black ? 8 : -8, because pawns are the other color
 	const uint64_t pawnLeft = shift(enemyBB[PAWN] & ~colBitmask[0], (pos.m_blackToMove ? 8 : -8) - 1);
 	const uint64_t pawnRight = shift(enemyBB[PAWN] & ~colBitmask[7], (pos.m_blackToMove ? 8 : -8) + 1);
+	pawnAtt = pawnLeft | pawnRight;
 	if constexpr (calcAttackedTiles) {
 		tileAttacked |= pawnLeft | pawnRight;
 	}
