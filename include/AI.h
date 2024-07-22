@@ -12,18 +12,28 @@ public:
 
 	//Warning: pos is referece => changes made by the AI will impact the original position
 	void initPos(Position* pos_);
-
+	int16_t iterativeDeepening(int8_t depth);
 	template<bool root = 1>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 
 	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t ttBestMove = nullMove);
+	int* evalGuess;//Used for ordering moves
+	int16_t* sortHelper;//Used for sorting moves based on guesses
 
 	int16_t bestMove;
 
 	//Warning: pos is referece => changes made by the AI will impact the original position
 	Position* pos;
 };
+
+inline int16_t AI::iterativeDeepening(int8_t depth) {
+	int16_t eval = 0;
+	for (int8_t i = 2; i < depth; i++) {
+		eval = search(depth, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+	}
+	return eval;
+}
 
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
@@ -73,7 +83,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, (foundTTEntry && ttEntryRes->depth >= 2 ? ttEntryRes->bestMove : nullMove));
+	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
 
 	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is acihieved
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
@@ -85,11 +95,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		//Temporary
-		if (root) {
-			std::cout << "Evaluating ";
-			printName(moves[i]);
-			std::cout << ": " << res << "; Alpha: " << alpha << "; Beta: " << beta << '\n';
-		}
+		//if (root) {
+		//	std::cout << "Evaluating ";
+		//	printName(moves[i]);
+		//	std::cout << ": " << res << "; Alpha: " << alpha << "; Beta: " << beta << '\n';
+		//}
 
 		//If mate ? decrease value with depth
 		if (res > pieceValue[KING] - 100) {
@@ -184,45 +194,61 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t ttBestMove)
 		0/*maybe later add pawns*/
 	};
 	for (int16_t i = startIdx; i < endIdx; i++) {
-		int maxGuess = -pieceValue[KING], maxGuessIdx = -1;
-		for (int16_t j = i; j < endIdx; j++) {
-			int16_t curMove = pos->m_legalMoves[j];
-			int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
-			int curGuess = 0;
-			//If capturing guess = val[capturedPiece] - val[captuingPece]
-			if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
-				//13 * capturedPieceVal to prioritise captures before non-captures and 
-				//to incentivise capturing more valuable pieces; We chosse 13, because
-				//13 is the lowest number above how much pawns a queen is worth
-				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pos->m_pieceOnTile[stPos]->type];
-			}
-			//If tile attacked by opponent pawn
-			if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
-				curGuess -= pieceValue[pos->m_pieceOnTile[stPos]->type] >> 1;
-			}
-
-			//Promoting is good
-			if (getPromotionPiece(curMove) != UNDEF) {
-				curGuess += pieceValue[getPromotionPiece(curMove)];
-			}
-			//Favor checks slightly
-			PieceType type = pos->m_pieceOnTile[stPos]->type;
-			if (checksToKing[type] & (1ULL << endPos)) {
-				curGuess += 85;
-			}
-
-			//Favor move in tt
-			if (curMove == ttBestMove) {
-				curGuess = 0xEFFF;//<- just a sufficiently large number
-			}
-
-			if (curGuess > maxGuess) {
-				maxGuess = curGuess;
-				maxGuessIdx = j;
-			}
+		//Note: here we only guess how good a move is, so we can afford to make
+		//guesses overinflated since the only thing that matters is their relative values
+		int16_t curMove = pos->m_legalMoves[i];
+		int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
+		PieceType pt = pos->m_pieceOnTile[stPos]->type;
+		int curGuess = 0;
+		//If capturing guess = val[capturedPiece] - val[captuingPece]
+		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
+			//13 * capturedPieceVal to prioritise captures before non-captures and 
+			//to incentivise capturing more valuable pieces; We chosse 13, because
+			//13 is the lowest number above how much pawns a queen is worth
+			curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
 		}
-		int16_t swapTemp = pos->m_legalMoves[i];
-		pos->m_legalMoves[i] = pos->m_legalMoves[maxGuessIdx];
-		pos->m_legalMoves[maxGuessIdx] = swapTemp;
+		//If tile attacked by opponent pawn
+		if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
+			//mult by 4, because why not?
+			curGuess -= 4 * pieceValue[pt];
+		}
+
+		//Promoting is good
+		if (getPromotionPiece(curMove) != UNDEF) {
+			//Multiply by 14, because when capturing we multiply 
+			//by 13 and promoting is more likely to be good (I think)
+			curGuess += 14 * pieceValue[getPromotionPiece(curMove)];
+		}
+		//Favor checks slightly
+		if (checksToKing[pt] & (1ULL << endPos)) {
+			//Add pieceValue[piece to make move] / 32, because generally checks with
+			//queens and rooks are better (and there is a higher chance for a fork)
+			curGuess += 150 + (pieceValue[pt] >> 5);
+		}
+
+		//Favor move in tt
+		if (curMove == ttBestMove) {
+			curGuess = 0x7FFF;//<- just a sufficiently large number
+		}
+
+		//Write in guess array that will later be used to sort the moves
+		evalGuess[i - startIdx] = curGuess;
+		//In sortHelper store indices of moves
+		sortHelper[i - startIdx] = i - startIdx;
+	}
+	//Instead of sorting moves based on guesses with lambda or predicate
+	//sort indices instead and then use them to reconstruct moves
+	std::sort(sortHelper, sortHelper + (endIdx - startIdx),
+		[this] (int16_t idx1, int16_t idx2) {
+			return evalGuess[idx1] > evalGuess[idx2];
+		}
+	);
+
+	//Convert indices in sortHelper to corresponding moves
+	for (int16_t i = startIdx; i < endIdx; i++) {
+		sortHelper[i - startIdx] = pos->m_legalMoves[sortHelper[i - startIdx] + startIdx];
+	}
+	for (int16_t i = startIdx; i < endIdx; i++) {
+		pos->m_legalMoves[i] = sortHelper[i - startIdx];
 	}
 }

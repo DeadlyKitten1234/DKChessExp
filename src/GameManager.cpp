@@ -11,7 +11,7 @@ GameManager::~GameManager() {
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
 		long stTime = clock();
-		std::cout << m_ai.search(6, 2 * -pieceValue[KING], 2 * pieceValue[KING]);
+		std::cout << m_ai.iterativeDeepening(12);
 		std::cout << " Time: " << clock() - stTime << '\n';
 		m_pos->makeMove(m_ai.bestMove);
 		m_pos->updateLegalMoves<0>();

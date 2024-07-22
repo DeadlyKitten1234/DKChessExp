@@ -10,7 +10,7 @@ World world;
 /*
 IF DEBUGGING:
 - change "Whole program optimization" to "NONE"
-- change "Optimisation" to "/Od"
+- change "Optimization" to "/Od"
 - change "Basic runtime checks" to "Both"
 - change "Debug information format" to "/Zl"
 MAXIMUM OPTIMISATIONS IS:
@@ -18,18 +18,15 @@ MAXIMUM OPTIMISATIONS IS:
 make sure to compile on x64
 TODO:
     -fix
-    .transposition table collision?
-    .make it bring king closer
-    .if spam queens, they will be more valuable than mate, so do something?
+    .if spam queens, they will be more valuable than mate, so do something like max(mateScore/2, pcsEval)?
+    .fix bot always drawing by repetition
 
     -change
-    .make move ordering O(nlogn) sort
     .make more evaluations to ordering
 
     -add
     .add bonuses for sq
     .add draws by insufficient material and repetition of moves
-    .add iterative deepening
     .add some tests? (take them from chess.com puzzles) in TestMaganer
 
     -read
@@ -43,6 +40,7 @@ TODO:
     .<https://www.chessprogramming.org/Reverse_Futility_Pruning>
     .<https://www.chessprogramming.org/Lazy_Evaluation>
     .<https://www.chessprogramming.org/Lazy_SMP>
+    .<https://www.chessprogramming.org/Scout>
 */
 #include "AI.h"
 #include <iostream>
@@ -59,9 +57,8 @@ int main(int argc, char* argv[]) {
     initTests();
 
     Position* pos = new Position();
-    //char fen[] = "8/3KP3/8/8/8/7q/8/6k1 w - - 0 1";
-    //char fen[] =  "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
-    char fen[] = "8/3r4/3k4/8/8/3K4/8/8 b - - 0 1";
+    char fen[] = "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
+    //char fen[] = "8/3r4/3k4/8/8/3K4/8/8 b - - 0 1";
     //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     //reverseFenPosition(fen);
     pos->readFEN(fen);

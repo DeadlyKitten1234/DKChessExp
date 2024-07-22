@@ -36,11 +36,11 @@ public:
 
 		//Here we use the genAndType arrangement, where the generation is 
 		//already shifted left 3 => weigh generation 8 times as much as depth
-		return (genAndType & 0xF8) + depth;
+		return (genAndType & 0xF8) + depth + (4 * (boundType() == BoundType::Exact)) + (2 * (boundType() == BoundType::LowBound));
 	}
 
-	//malloc allocates 12 bytes if a int32_t is used for optimisation?
-	//howerver we want class to take up 10 bytes, so key is split into 2 * int16_t
+	//malloc allocates 12 bytes for optimisation if a int32_t is used?
+	//Howerver we want class to take up 10 bytes, so key is split into 2 * int16_t
 	//Note: we don't use the full 64 bit key, because in tt first 19(if tt is 16mb) bits are used
 	//as index and here we use last 32 bits for confirmation key. Because zobrist hashing has
 	//collisions even with 64 bits, using 51 bits will increase the probability of collision

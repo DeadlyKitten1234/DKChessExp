@@ -61,14 +61,15 @@ private:
 		//Implementation of this function taken from Sebastian Lague
 		//https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V1-Unity/Assets/Scripts/Core/AI/Evaluation.cs
 		const int16_t pcsValueWithoutPawns = m_whitePiecesEval + m_blackPiecesEval - (m_whitePiecesCnt[PAWN] + m_blackPiecesCnt[PAWN]) * pieceValue[PAWN];
-		return max(0, (100 * (endgameMaterialStart - pcsValueWithoutPawns)) / endgameMaterialStart);
+		//return = 128 * (1 - (pcsValueWithoutPawns / endgameMaterialStart))
+		return max(0, ((endgameMaterialStart - pcsValueWithoutPawns) << 7) / endgameMaterialStart);
 	}
 	template<bool blackPerspective>
 	int16_t forceKingToEdgeEval();
 	void deleteData();
 };
 
-#include "MoveGenerator.h"//Include hacks. do not move to beggining
+#include "MoveGenerator.h"//Include hacks so doesn't CE. do not move to beggining of file
 
 template<bool capturesOnly>
 void Position::updateLegalMoves() {
@@ -101,8 +102,8 @@ inline int16_t Position::forceKingToEdgeEval() {
 		enemyKing = m_blackPiece[0];
 	}
 	int8_t enemyKingDistFromCenter = 6 - min<int8_t>(enemyKing->x, 7 - enemyKing->x) - min<int8_t>(enemyKing->y, 7 - enemyKing->y);
-	int16_t eval = enemyKingDistFromCenter * 12;
+	int16_t eval = enemyKingDistFromCenter * 10;
 	//Expression below is 4 * (14 - manhatan distance between kings)
 	eval += (14 - abs(friendlyKing->x - enemyKing->x) - abs(friendlyKing->y - enemyKing->y)) * 4;
-	return eval * endgameWeight / 32;
+	return (eval * endgameWeight) >> 6;
 }
