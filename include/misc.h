@@ -1,7 +1,6 @@
 #pragma once
 #include <cinttypes>
 
-
 inline int8_t getX(const int8_t pos) {
 	return (pos & 7);//7 = 111
 };

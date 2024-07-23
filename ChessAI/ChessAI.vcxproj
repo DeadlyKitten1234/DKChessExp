@@ -131,6 +131,10 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <OmitFramePointers>false</OmitFramePointers>
       <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <AssemblerOutput>NoListing</AssemblerOutput>
+      <AssemblerListingLocation>&amp;(IntDir)</AssemblerListingLocation>
+      <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
+      <SupportJustMyCode>false</SupportJustMyCode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

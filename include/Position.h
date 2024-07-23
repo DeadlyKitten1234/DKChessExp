@@ -11,8 +11,8 @@ public:
 
 	void readFEN(const char* fen);
 
-	int8_t makeMove(int16_t move);//Returns captured piece idx
-	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
+	int8_t __stdcall makeMove(int16_t move);//Returns captured piece idx
+	void __stdcall undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
 	template<bool capturesOnly>
 	void updateLegalMoves();
 	inline int16_t evaluate() {

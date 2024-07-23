@@ -6,6 +6,7 @@ Piece::Piece() {
 	y = -1;
 	diagMain = -1;
 	diagScnd = -1;
+	idx = -1;
 	type = PieceType::UNDEF;
 	black = 0;
 }

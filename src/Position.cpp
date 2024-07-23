@@ -135,18 +135,10 @@ void Position::readFEN(const char* fen) {
 			i++;
 			break;
 		}
-		if (fen[i] == 'K') {
-			m_bitmaskCastling |= 8;
-		}
-		if (fen[i] == 'Q') {
-			m_bitmaskCastling |= 4;
-		}
-		if (fen[i] == 'k') {
-			m_bitmaskCastling |= 2;
-		}
-		if (fen[i] == 'q') {
-			m_bitmaskCastling |= 1;
-		}
+		if (fen[i] == 'K') { m_bitmaskCastling |= 8; }
+		if (fen[i] == 'Q') { m_bitmaskCastling |= 4; }
+		if (fen[i] == 'k') { m_bitmaskCastling |= 2; }
+		if (fen[i] == 'q') { m_bitmaskCastling |= 1; }
 	}
 	if (!(fen[i] == ' ' || fen[i] == '-')) {
 		m_possibleEnPassant = 0;
@@ -165,11 +157,21 @@ void Position::readFEN(const char* fen) {
 	}
 	//For now don't read moves since pawn push and total moves
 
+	//Set indices of pieces; Do it here, because doing it dynamically 
+	//would make it a mess (plus its more understandable)
+	for (int8_t i = 0; i < m_whiteTotalPiecesCnt; i++) {
+		m_whitePiece[i]->idx = i;
+	}
+	for (int8_t i = 0; i < m_blackTotalPiecesCnt; i++) {
+		m_blackPiece[i]->idx = i;
+	}
+	//Set zobrist hash; Do it here for the same reason as setting indices
 	zHash = getPositionHash(*this);
+	//Set legal moves
 	updateLegalMoves<0>();
 }
 
-int8_t Position::makeMove(int16_t move) {
+int8_t __stdcall Position::makeMove(int16_t move) {
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
 	//Update bitboards
 	if (m_blackToMove) {
@@ -191,26 +193,26 @@ int8_t Position::makeMove(int16_t move) {
 	zHash ^= hashNumBlackToMove;
 	//If castle
 	if (m_pieceOnTile[stTile]->type == PieceType::KING && abs(stTile - endTile) == 2) {
-		int8_t addRookPos = (stTile > endTile ? 1 : -1);
-		int8_t rookPos = stTile + (addRookPos == 1 ? -4 : 3);
-		m_pieceOnTile[rookPos]->setPos(endTile + addRookPos);
-		m_pieceOnTile[endTile + addRookPos] = m_pieceOnTile[rookPos];
+		const int8_t rookEndPos = endTile + (stTile > endTile ? 1 : -1);
+		int8_t rookPos = stTile + (stTile > endTile ? -4 : 3);
+		m_pieceOnTile[rookPos]->setPos(rookEndPos);
+		m_pieceOnTile[rookEndPos] = m_pieceOnTile[rookPos];
 		m_pieceOnTile[rookPos] = nullptr;
 		//Update rook bitboard
 		if (m_blackToMove) {
 			m_blackAllPiecesBitboard &= ~(1ULL << rookPos);
-			m_blackAllPiecesBitboard |= (1ULL << (endTile + addRookPos));
+			m_blackAllPiecesBitboard |= (1ULL << rookEndPos);
 			m_blackBitboards[ROOK] &= ~(1ULL << rookPos);
-			m_blackBitboards[ROOK] |= (1ULL << (endTile + addRookPos));
+			m_blackBitboards[ROOK] |= (1ULL << rookEndPos);
 		} else {
 			m_whiteAllPiecesBitboard &= ~(1ULL << rookPos);
-			m_whiteAllPiecesBitboard |= (1ULL << (endTile + addRookPos));
+			m_whiteAllPiecesBitboard |= (1ULL << rookEndPos);
 			m_whiteBitboards[ROOK] &= ~(1ULL << rookPos);
-			m_whiteBitboards[ROOK] |= (1ULL << (endTile + addRookPos));
+			m_whiteBitboards[ROOK] |= (1ULL << rookEndPos);
 		}
 		//Update rook zobrist hash
 		zHash ^= hashNums[rookPos][m_blackToMove][ROOK];
-		zHash ^= hashNums[endTile + addRookPos][m_blackToMove][ROOK];
+		zHash ^= hashNums[rookEndPos][m_blackToMove][ROOK];
 	}
 	//Remove castle rights if moved king or rook
 	int8_t begginingCastleRights = m_bitmaskCastling;
@@ -267,27 +269,27 @@ int8_t Position::makeMove(int16_t move) {
 		PieceType type = m_pieceOnTile[captureTile]->type;
 		Piece** enemyPiece = (m_blackToMove ? m_whitePiece : m_blackPiece);
 		int8_t enemyPieceCnt = (m_blackToMove ? m_whiteTotalPiecesCnt : m_blackTotalPiecesCnt);
-
-		for (int8_t i = 0; i < enemyPieceCnt; i++) {
-			if (enemyPiece[i] == m_pieceOnTile[captureTile]) {
-				if (m_blackToMove) {
-					m_whiteTotalPiecesCnt--;
-					m_whitePiecesCnt[type]--;
-					m_whiteBitboards[type] &= ~(1ULL << captureTile);
-					m_whiteAllPiecesBitboard &= ~(1ULL << captureTile);
-					m_whitePiecesEval -= pieceValue[type];
-				} else {
-					m_blackTotalPiecesCnt--;
-					m_blackPiecesCnt[type]--;
-					m_blackBitboards[type] &= ~(1ULL << captureTile);
-					m_blackAllPiecesBitboard &= ~(1ULL << captureTile);
-					m_blackPiecesEval -= pieceValue[type];
-				}
-				swap(enemyPiece[i], enemyPiece[enemyPieceCnt - 1]);
-				capturedPieceIdx = i;
-				break;
-			}
+		//Update pieces count, bitboards and pieces eval
+		if (m_blackToMove) {
+			m_whiteTotalPiecesCnt--;
+			m_whitePiecesCnt[type]--;
+			m_whiteBitboards[type] &= ~(1ULL << captureTile);
+			m_whiteAllPiecesBitboard &= ~(1ULL << captureTile);
+			m_whitePiecesEval -= pieceValue[type];
+		} else {
+			m_blackTotalPiecesCnt--;
+			m_blackPiecesCnt[type]--;
+			m_blackBitboards[type] &= ~(1ULL << captureTile);
+			m_blackAllPiecesBitboard &= ~(1ULL << captureTile);
+			m_blackPiecesEval -= pieceValue[type];
 		}
+		capturedPieceIdx = m_pieceOnTile[captureTile]->idx;
+		//Swap piece with last one in array (size decreased by 1 above)
+		swap(enemyPiece[capturedPieceIdx], enemyPiece[enemyPieceCnt - 1]);
+		//Update indices
+		enemyPiece[capturedPieceIdx]->idx = capturedPieceIdx;
+		enemyPiece[enemyPieceCnt - 1]->idx = enemyPieceCnt - 1;
+		//Update pieceOnTile
 		m_pieceOnTile[captureTile] = nullptr;
 		//Update zobrist hash
 		zHash ^= hashNums[captureTile][!m_blackToMove][type];
@@ -318,7 +320,7 @@ int8_t Position::makeMove(int16_t move) {
 	return capturedPieceIdx;
 }
 
-void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant) {
+void __stdcall Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant) {
 	//Update zobrist hash for castling and ep
 	if (m_possibleEnPassant != -1) {
 		zHash ^= hashNumsEp[m_possibleEnPassant & 0b111];
@@ -413,8 +415,14 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 	if (capturedPieceIdx != -1) {
 		Piece** enemyPiece = (m_blackToMove ? m_whitePiece : m_blackPiece);
 		int8_t enemyPiecesCnt = (m_blackToMove ? m_whiteTotalPiecesCnt : m_blackTotalPiecesCnt);
+		//Revert swap in makeMove
 		swap(enemyPiece[capturedPieceIdx], enemyPiece[enemyPiecesCnt]);
+		//Update indices
+		enemyPiece[capturedPieceIdx]->idx = capturedPieceIdx;
+		enemyPiece[enemyPiecesCnt]->idx = enemyPiecesCnt;
+		//Update pieceOnTile
 		m_pieceOnTile[captureTile] = enemyPiece[capturedPieceIdx];
+		//Update pieces count, bitboards, and pieces eval
 		PieceType type = m_pieceOnTile[captureTile]->type;
 		if (m_blackToMove) {
 			m_whiteTotalPiecesCnt++;

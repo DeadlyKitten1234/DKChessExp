@@ -15,6 +15,8 @@ enum PieceType : int8_t {
 
 const int16_t pieceValue[6] = { /*King value: INF = 10000*/10000, 1220, 400, 375, 610, 100 };
 
+extern class Position;
+
 class Piece {
 public:
 	Piece();
@@ -30,6 +32,13 @@ public:
 	int8_t diagScnd;//readOnly
 	PieceType type;	//readOnly
 	bool black;		//readOnly
+
+	friend Position;
+private:
+	//This is index in Position::m_whitePiece or Position::m_blackPiece
+	//Used for quickly swapping pieces when capturing
+	//Variable should be managed by position
+	int8_t idx;
 };
 
 inline PieceType getTypeFromChar(char piece) {

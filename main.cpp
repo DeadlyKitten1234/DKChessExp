@@ -13,6 +13,7 @@ IF DEBUGGING:
 - change "Optimization" to "/Od"
 - change "Basic runtime checks" to "Both"
 - change "Debug information format" to "/Zl"
+- change "Support just my code debugging" to Yes(/JMC)
 MAXIMUM OPTIMISATIONS IS:
 -/O2; /Ob2; whatever(i use /Oi); /Ot; wahtever(i use No(/Oy-)); wahtever(i use No); /GL
 make sure to compile on x64
@@ -20,6 +21,9 @@ TODO:
     -fix
     .if spam queens, they will be more valuable than mate, so do something like max(mateScore/2, pcsEval)?
     .fix bot always drawing by repetition
+
+    -improve
+    .Position::makeMove loop to find piece
 
     -change
     .make more evaluations to ordering
@@ -57,9 +61,10 @@ int main(int argc, char* argv[]) {
     initTests();
 
     Position* pos = new Position();
-    char fen[] = "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
+    //char fen[] = "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
     //char fen[] = "8/3r4/3k4/8/8/3K4/8/8 b - - 0 1";
     //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    char fen[] = "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 0 6";
     //reverseFenPosition(fen);
     pos->readFEN(fen);
 

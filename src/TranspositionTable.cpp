@@ -33,28 +33,3 @@ void TranspositionTable::clear() {
 		std::memset(&chunk[i], 0, chunkSz);
 	}
 }
-
-TTEntry* TranspositionTable::find(const uint64_t key, bool& found) const {
-	TTEntry* entriesInChunk = chunk[(key >> shRVal)].entry;
-	for (int8_t i = 0; i < 3; i++) {
-		if (entriesInChunk[i].sameKey(key)) {
-			found = 1;
-			return &entriesInChunk[i];
-		}
-	}
-	//Even if key hasn't been found, return the least valuable entry to be replaced
-	int16_t maxValue = -1;
-	TTEntry* ans = nullptr;
-	for (int8_t i = 0; i < 3; i++) {
-		int16_t val = entriesInChunk[i].calcValue();
-		if (entriesInChunk[i].gen() > gen) {
-			val -= 0x100;
-		}
-		if (val > maxValue) {
-			maxValue = val;
-			ans = &entriesInChunk[i];
-		}
-	}
-	found = 0;
-	return ans;
-}
