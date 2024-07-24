@@ -104,6 +104,6 @@ inline int16_t Position::forceKingToEdgeEval() {
 	int8_t enemyKingDistFromCenter = 6 - min<int8_t>(enemyKing->x, 7 - enemyKing->x) - min<int8_t>(enemyKing->y, 7 - enemyKing->y);
 	int16_t eval = enemyKingDistFromCenter * 10;
 	//Expression below is (14 - manhatan distance between kings) * weight
-	eval += (14 - abs(friendlyKing->x - enemyKing->x) - abs(friendlyKing->y - enemyKing->y)) * 4;
+	eval += (14 - abs(friendlyKing->x - enemyKing->x) - abs(friendlyKing->y - enemyKing->y)) * 6;
 	return (eval * endgameWeight) >> 6;
 }

@@ -137,11 +137,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Don't force player to capture if it is worse for him
 	//(example: don't force Qxa1 if then there is bxa1)
-	int16_t eval = pos->evaluate();
-	if (eval >= beta) {
+	int16_t staticEval = pos->evaluate();
+	//When going to cut, don't tt.find, because its expensive
+	if (staticEval >= beta) {
 		return beta;
 	}
-	alpha = max(alpha, eval);
 	//Check tt
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
@@ -150,15 +150,20 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		ttEntryRes->setGen(tt.gen);
 		//If lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
-			if (ttEntryRes->eval >= beta) {
-				return beta;
-			}
-			alpha = max(alpha, ttEntryRes->eval);
+			staticEval = ttEntryRes->eval;
 		}
 		//If exact bound => renew gen and return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
 			return ttEntryRes->eval;
 		}
+	}
+	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is achieved
+	if (staticEval >= beta) {
+		return beta;
+	}
+	if (staticEval > alpha) {
+		alpha = staticEval;
+		failLow = 0;
 	}
 
 	pos->updateLegalMoves<1>();
@@ -167,7 +172,6 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 
 	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
 
-	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is achieved
 	int16_t curBestMove = nullMove;
 	const int16_t* moves = pos->m_legalMoves + pos->m_legalMovesStartIdx;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
