@@ -41,10 +41,10 @@ public:
 
 	//malloc allocates 12 bytes for optimisation if a int32_t is used?
 	//Howerver we want class to take up 10 bytes, so key is split into 2 * int16_t
-	//Note: we don't use the full 64 bit key, because in tt first 19(if tt is 16mb) bits are used
+	//Note: we don't use the full 64 bit key, because in tt first x=log2(sz)+15 bits are used
 	//as index and here we use last 32 bits for confirmation key. Because zobrist hashing has
-	//collisions even with 64 bits, using 51 bits will increase the probability of collision
-	//2^13 = 8192 times, but it should still be quite rare
+	//collisions even with 64 bits, using 32+x bits will increase the probability of collision
+	//2^(32-x) times, but it should still be quite rare; (Example: sz=64MB; x = 21; P(collision) = 2^(-53))
 	uint16_t key1;
 	uint16_t key2;
 	int16_t bestMove;

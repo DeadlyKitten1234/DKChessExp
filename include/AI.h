@@ -86,7 +86,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
 
-	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is acihieved
+	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is achieved
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
@@ -142,22 +142,21 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		return beta;
 	}
 	alpha = max(alpha, eval);
-	//Only read from tt, because evaluating only captures
+	//Check tt
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	//Anyting written in tt will already contain all captures, so don't check depth
 	if (foundTTEntry) {
+		ttEntryRes->setGen(tt.gen);
 		//If lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
 			if (ttEntryRes->eval >= beta) {
-				ttEntryRes->setGen(tt.gen);
 				return beta;
 			}
 			alpha = max(alpha, ttEntryRes->eval);
 		}
 		//If exact bound => renew gen and return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
-			ttEntryRes->setGen(tt.gen);
 			return ttEntryRes->eval;
 		}
 	}
@@ -168,6 +167,8 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 
 	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
 
+	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is achieved
+	int16_t curBestMove = nullMove;
 	const int16_t* moves = pos->m_legalMoves + pos->m_legalMovesStartIdx;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
@@ -179,10 +180,16 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		if (res >= beta) {
+			ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
 			return beta;
 		}
-		alpha = max(alpha, res);
+		if (res > alpha) {
+			alpha = res;
+			failLow = 0;
+			curBestMove = curMove;
+		}
 	}
+	ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::LowBound));
 	return alpha;
 }
 
