@@ -13,9 +13,9 @@ World::World() {
 World::~World() {}
 
 void World::init() {
-	//m_presenter.init();
-	//m_backgroundTexture = loadTexture("Background", Presenter::m_mainRenderer);
-	//m_gameManager.init();
+	m_presenter.init();
+	m_backgroundTexture = loadTexture("Background", Presenter::m_mainRenderer);
+	m_gameManager.init();
 
 	m_gameManager.setAI(0, 1);
 }
