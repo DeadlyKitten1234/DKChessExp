@@ -87,7 +87,7 @@ public:
 	void setSize(const int sizeMB);//Size must be a power of 2
 	void clear();
 
-	inline TTEntry* __stdcall find(const uint64_t key, bool& found) const;
+	inline TTEntry* find(const uint64_t key, bool& found) const;
 
 	int chunksCnt;
 	int8_t shRVal;
@@ -95,28 +95,45 @@ public:
 	uint8_t gen;//Must be < 32 to be able to put into Entry
 };
 
-inline TTEntry* __stdcall TranspositionTable::find(const uint64_t key, bool& found) const {
+inline TTEntry* TranspositionTable::find(const uint64_t key, bool& found) const {
 	const int idx = key >> shRVal;
 	TTEntry* const entriesInChunk = chunk[idx].entry;
-	for (int8_t i = 0; i < 3; i++) {
-		if (entriesInChunk[i].sameKey(key)) {
-			found = 1;
-			return &entriesInChunk[i];
-		}
+	
+	//This was coded on MSVS and for some reason VC didn't want to unroll loops
+	//So had to manually unroll to get a *slightly* (about 4%) faster performance
+	if (entriesInChunk[0].sameKey(key)) {
+		found = 1;
+		return &entriesInChunk[0];
 	}
+	if (entriesInChunk[1].sameKey(key)) {
+		found = 1;
+		return &entriesInChunk[1];
+	}
+	if (entriesInChunk[2].sameKey(key)) {
+		found = 1;
+		return &entriesInChunk[2];
+	}
+
+	
 	//Even if key hasn't been found, return the least valuable entry to be replaced
-	int16_t maxValue = -1;
-	TTEntry* ans = nullptr;
-	for (int8_t i = 0; i < 3; i++) {
-		int16_t val = entriesInChunk[i].calcValue();
-		if (entriesInChunk[i].gen() > gen) {
-			val -= 0x100;
-		}
-		if (val > maxValue) {
-			maxValue = val;
-			ans = &entriesInChunk[i];
-		}
+	TTEntry* ans = entriesInChunk;
+	int16_t maxValue = ans->calcValue();
+	//This was coded on MSVS and for some reason VC didn't want to unroll loops
+	//So had to manually unroll to get a *slightly* (about 4%) faster performance
+	int16_t val = entriesInChunk[1].calcValue();
+	if (entriesInChunk[1].gen() > gen) { val -= 0x100; }
+	if (val > maxValue) {
+		maxValue = val;
+		ans = &entriesInChunk[1];
 	}
+
+	val = entriesInChunk[2].calcValue();
+	if (entriesInChunk[2].gen() > gen) { val -= 0x100; }
+	if (val > maxValue) {
+		maxValue = val;
+		ans = &entriesInChunk[2];
+	}
+
 	found = 0;
 	return ans;
 }

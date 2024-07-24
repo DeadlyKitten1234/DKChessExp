@@ -171,7 +171,7 @@ void Position::readFEN(const char* fen) {
 	updateLegalMoves<0>();
 }
 
-int8_t __stdcall Position::makeMove(int16_t move) {
+int8_t Position::makeMove(int16_t move) {
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
 	//Update bitboards
 	if (m_blackToMove) {
@@ -229,10 +229,14 @@ int8_t __stdcall Position::makeMove(int16_t move) {
 		if (stTile == 56) { m_bitmaskCastling &= ~1; }//~0001
 		if (stTile == 63) { m_bitmaskCastling &= ~2; }//~0010
 	}
-	if (endTile == 0) { m_bitmaskCastling &= ~4; }//~0100
-	if (endTile == 7) { m_bitmaskCastling &= ~8; }//~1000
-	if (endTile == 56) { m_bitmaskCastling &= ~1; }//~0001
-	if (endTile == 63) { m_bitmaskCastling &= ~2; }//~0010
+	//Number below is the four corners (where the rooks are)
+	//This *might* make it a *little* faster
+	if ((1ULL << endTile) & 0x8100000000000081ULL) {
+		if (endTile == 0) { m_bitmaskCastling &= ~4; }//~0100
+		if (endTile == 7) { m_bitmaskCastling &= ~8; }//~1000
+		if (endTile == 56) { m_bitmaskCastling &= ~1; }//~0001
+		if (endTile == 63) { m_bitmaskCastling &= ~2; }//~0010
+	}
 	//Update zobrist hash for castling
 	zHash ^= hashNumsCastling[begginingCastleRights];
 	zHash ^= hashNumsCastling[m_bitmaskCastling];
@@ -266,9 +270,9 @@ int8_t __stdcall Position::makeMove(int16_t move) {
 	}
 	//Capture
 	if (m_pieceOnTile[captureTile] != nullptr) {
-		PieceType type = m_pieceOnTile[captureTile]->type;
-		Piece** enemyPiece = (m_blackToMove ? m_whitePiece : m_blackPiece);
-		int8_t enemyPieceCnt = (m_blackToMove ? m_whiteTotalPiecesCnt : m_blackTotalPiecesCnt);
+		const PieceType type = m_pieceOnTile[captureTile]->type;
+		Piece** const const enemyPiece = (m_blackToMove ? m_whitePiece : m_blackPiece);
+		const int8_t enemyPieceCnt = (m_blackToMove ? m_whiteTotalPiecesCnt : m_blackTotalPiecesCnt);
 		//Update pieces count, bitboards and pieces eval
 		if (m_blackToMove) {
 			m_whiteTotalPiecesCnt--;
@@ -320,7 +324,7 @@ int8_t __stdcall Position::makeMove(int16_t move) {
 	return capturedPieceIdx;
 }
 
-void __stdcall Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant) {
+void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant) {
 	//Update zobrist hash for castling and ep
 	if (m_possibleEnPassant != -1) {
 		zHash ^= hashNumsEp[m_possibleEnPassant & 0b111];

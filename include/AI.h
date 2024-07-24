@@ -14,10 +14,10 @@ public:
 	void initPos(Position* pos_);
 	int16_t iterativeDeepening(int8_t depth);
 	template<bool root = 1>
-	int16_t __stdcall search(int8_t depth, int16_t alpha, int16_t beta);
+	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 
-	inline void __stdcall orderMoves(int16_t startIdx, int16_t endIdx, int16_t* incies, int16_t ttBestMove = nullMove);
+	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
 	int* evalGuess;//Used for ordering moves
 
 	int16_t bestMove;
@@ -35,7 +35,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 }
 
 template<bool root>
-inline int16_t __stdcall AI::search(int8_t depth, int16_t alpha, int16_t beta) {
+inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth == 0) {
 		return searchOnlyCaptures(alpha, beta);
 	}
@@ -134,7 +134,7 @@ inline int16_t __stdcall AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline int16_t __stdcall AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
+inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Don't force player to capture if it is worse for him
 	//(example: don't force Qxa1 if then there is bxa1)
 	int16_t eval = pos->evaluate();
@@ -145,7 +145,8 @@ inline int16_t __stdcall AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Only read from tt, because evaluating only captures
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
-	if (foundTTEntry && ttEntryRes->depth >= 2) {
+	//Anyting written in tt will already contain all captures, so don't check depth
+	if (foundTTEntry) {
 		//If lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
 			if (ttEntryRes->eval >= beta) {
@@ -185,7 +186,7 @@ inline int16_t __stdcall AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline void __stdcall AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* incies, int16_t ttBestMove) {
+inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove) {
 	//Note: here we guess based on the player to move
 	//no need to complicate things with if (black) {} everywhere
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
@@ -208,7 +209,7 @@ inline void __stdcall AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* 
 		int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
 		PieceType pt = pos->m_pieceOnTile[stPos]->type;
 		int curGuess = 0;
-		//If capturing guess = val[capturedPiece] - val[captuingPece]
+		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
 			//13 * capturedPieceVal to prioritise captures before non-captures and 
 			//to incentivise capturing more valuable pieces; We chosse 13, because
@@ -231,7 +232,7 @@ inline void __stdcall AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* 
 		if (checksToKing[pt] & (1ULL << endPos)) {
 			//Add pieceValue[piece to make move] / 32, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
-			curGuess += 150 + (pieceValue[pt] >> 5);
+			curGuess += 75 + (pieceValue[pt] >> 5);
 		}
 
 		//Favor move in tt
@@ -242,11 +243,10 @@ inline void __stdcall AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* 
 		//Write in guess array that will later be used to sort the moves
 		evalGuess[i - startIdx] = curGuess;
 		//In sortHelper store indices of moves
-		incies[i - startIdx] = i - startIdx;
+		indices[i - startIdx] = i - startIdx;
 	}
-	//Instead of sorting moves based on guesses and somehow linking both together, sort
-	//indices instead and then use them to reconstruct moves (like a sort of linking method)
-	std::sort(incies, incies + (endIdx - startIdx),
+	//Use indices to "link" evalGuess and pos->m_legalMove together because use std::sort
+	std::sort(indices, indices + (endIdx - startIdx),
 		[this](int16_t idx1, int16_t idx2) {
 			return evalGuess[idx1] > evalGuess[idx2];
 		}

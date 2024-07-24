@@ -11,8 +11,8 @@ public:
 
 	void readFEN(const char* fen);
 
-	int8_t __stdcall makeMove(int16_t move);//Returns captured piece idx
-	void __stdcall undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
+	int8_t makeMove(int16_t move);//Returns captured piece idx
+	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
 	template<bool capturesOnly>
 	void updateLegalMoves();
 	inline int16_t evaluate() {
@@ -103,7 +103,7 @@ inline int16_t Position::forceKingToEdgeEval() {
 	}
 	int8_t enemyKingDistFromCenter = 6 - min<int8_t>(enemyKing->x, 7 - enemyKing->x) - min<int8_t>(enemyKing->y, 7 - enemyKing->y);
 	int16_t eval = enemyKingDistFromCenter * 10;
-	//Expression below is 4 * (14 - manhatan distance between kings)
+	//Expression below is (14 - manhatan distance between kings) * weight
 	eval += (14 - abs(friendlyKing->x - enemyKing->x) - abs(friendlyKing->y - enemyKing->y)) * 4;
 	return (eval * endgameWeight) >> 6;
 }
