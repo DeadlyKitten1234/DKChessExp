@@ -137,5 +137,8 @@
     <ClInclude Include="..\include\GameManager.h">
       <Filter>UI and Input</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\EvalValues.h">
+      <Filter>_Header Files\AI</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

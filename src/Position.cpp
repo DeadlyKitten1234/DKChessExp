@@ -28,6 +28,10 @@ Position::Position() {
 	m_blackPiecesEval = 0;
 	zHash = 0;
 	enemyPawnAttacksBitmask = 0;
+	m_whiteSqBonusEval = 0;
+	m_blackSqBonusEval = 0;
+	whiteEndgameWeight = 0;
+	blackEndgameWeight = 0;
 }
 
 Position::~Position() {
@@ -53,6 +57,8 @@ void Position::readFEN(const char* fen) {
 	m_blackToMove = 0;
 	m_whitePiecesEval = 0;
 	m_blackPiecesEval = 0;
+	whiteEndgameWeight = 0;
+	blackEndgameWeight = 0;
 	int8_t xPos = 0;
 	int8_t yPos = 7;
 	int i = 0;
@@ -165,6 +171,15 @@ void Position::readFEN(const char* fen) {
 	for (int8_t i = 0; i < m_blackTotalPiecesCnt; i++) {
 		m_blackPiece[i]->idx = i;
 	}
+	whiteEndgameWeight = getEndgameWeight(m_whitePiecesEval, m_whitePiecesCnt[PAWN]);
+	blackEndgameWeight = getEndgameWeight(m_blackPiecesEval, m_blackPiecesCnt[PAWN]);
+	//Set bonuses for sq; Note: evaluate king as if it isn't endgame, because in eval will change it
+	for (int8_t i = 0; i < m_whiteTotalPiecesCnt; i++) {
+		m_whiteSqBonusEval += getSqBonus(m_whitePiece[i]->type,m_whitePiece[i]->pos);
+	}
+	for (int8_t i = 0; i < m_blackTotalPiecesCnt; i++) {
+		m_blackSqBonusEval += getSqBonus(m_blackPiece[i]->type, m_blackPiece[i]->pos);
+	}
 	//Set zobrist hash; Do it here for the same reason as setting indices
 	zHash = getPositionHash(*this);
 	//Set legal moves
@@ -173,23 +188,10 @@ void Position::readFEN(const char* fen) {
 
 int8_t Position::makeMove(int16_t move) {
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
-	//Update bitboards
-	if (m_blackToMove) {
-		PieceType type = m_pieceOnTile[stTile]->type;
-		m_blackAllPiecesBitboard &= ~(1ULL << stTile);
-		m_blackAllPiecesBitboard |= (1ULL << endTile);
-		m_blackBitboards[type] &= ~(1ULL << stTile);
-		m_blackBitboards[type] |= (1ULL << endTile);
-	} else {
-		PieceType type = m_pieceOnTile[stTile]->type;
-		m_whiteAllPiecesBitboard &= ~(1ULL << stTile);
-		m_whiteAllPiecesBitboard |= (1ULL << endTile);
-		m_whiteBitboards[type] &= ~(1ULL << stTile);
-		m_whiteBitboards[type] |= (1ULL << endTile);
-	}
-	//Update zobrist hash
-	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[stTile]->type];
-	zHash ^= hashNums[endTile][m_blackToMove][m_pieceOnTile[stTile]->type];
+	//Update bitboards, bonuses ans zobrist hash
+	if (m_blackToMove) { updateDynamicVars<1>(m_pieceOnTile[stTile]->type, stTile, endTile); }
+	else			   { updateDynamicVars<0>(m_pieceOnTile[stTile]->type, stTile, endTile); }
+
 	zHash ^= hashNumBlackToMove;
 	//If castle
 	if (m_pieceOnTile[stTile]->type == PieceType::KING && abs(stTile - endTile) == 2) {
@@ -198,21 +200,9 @@ int8_t Position::makeMove(int16_t move) {
 		m_pieceOnTile[rookPos]->setPos(rookEndPos);
 		m_pieceOnTile[rookEndPos] = m_pieceOnTile[rookPos];
 		m_pieceOnTile[rookPos] = nullptr;
-		//Update rook bitboard
-		if (m_blackToMove) {
-			m_blackAllPiecesBitboard &= ~(1ULL << rookPos);
-			m_blackAllPiecesBitboard |= (1ULL << rookEndPos);
-			m_blackBitboards[ROOK] &= ~(1ULL << rookPos);
-			m_blackBitboards[ROOK] |= (1ULL << rookEndPos);
-		} else {
-			m_whiteAllPiecesBitboard &= ~(1ULL << rookPos);
-			m_whiteAllPiecesBitboard |= (1ULL << rookEndPos);
-			m_whiteBitboards[ROOK] &= ~(1ULL << rookPos);
-			m_whiteBitboards[ROOK] |= (1ULL << rookEndPos);
-		}
-		//Update rook zobrist hash
-		zHash ^= hashNums[rookPos][m_blackToMove][ROOK];
-		zHash ^= hashNums[rookEndPos][m_blackToMove][ROOK];
+		//Update bb, bonuses and zHash
+		if (m_blackToMove) { updateDynamicVars<1>(PieceType::ROOK, rookPos, rookEndPos); }
+		else			   { updateDynamicVars<0>(PieceType::ROOK, rookPos, rookEndPos); }
 	}
 	//Remove castle rights if moved king or rook
 	int8_t begginingCastleRights = m_bitmaskCastling;
@@ -243,25 +233,17 @@ int8_t Position::makeMove(int16_t move) {
 	//Promote
 	int8_t promotedPawnIdx = -1;
 	if (getPromotionPiece(move) != PieceType::UNDEF) {
-		PieceType promotionType = getPromotionPiece(move);
+		const PieceType promotionType = getPromotionPiece(move);
 		m_pieceOnTile[stTile]->type = promotionType;
-		//Update bitboards
+		//Tell updateDynamicVars than pawn "disappeared" and then tell it that 
+		//promotionType piece appeared from nothing on the same square
 		if (m_blackToMove) {
-			m_blackBitboards[PAWN] &= ~(1ULL << endTile);
-			m_blackBitboards[promotionType] |= (1ULL << endTile);
-			m_blackPiecesCnt[promotionType]++;
-			m_blackPiecesCnt[PAWN]--;
-			m_blackPiecesEval += pieceValue[promotionType] - pieceValue[PAWN];
-		} else {
-			m_whiteBitboards[PAWN] &= ~(1ULL << endTile);
-			m_whiteBitboards[promotionType] |= (1ULL << endTile);
-			m_whitePiecesCnt[promotionType]++;
-			m_whitePiecesCnt[PAWN]--;
-			m_whitePiecesEval += pieceValue[promotionType] - pieceValue[PAWN];
+			updateDynamicVars<1>(PieceType::PAWN, endTile, -1);
+			updateDynamicVars<1>(promotionType, -1, endTile);
+		} else { 
+			updateDynamicVars<0>(PieceType::PAWN, endTile, -1); 
+			updateDynamicVars<0>(promotionType, -1, endTile);
 		}
-		//Update zobrist hash
-		zHash ^= hashNums[endTile][m_blackToMove][PAWN];
-		zHash ^= hashNums[endTile][m_blackToMove][promotionType];
 	}
 	//En Passant
 	int8_t captureTile = endTile, capturedPieceIdx = -1;
@@ -271,22 +253,12 @@ int8_t Position::makeMove(int16_t move) {
 	//Capture
 	if (m_pieceOnTile[captureTile] != nullptr) {
 		const PieceType type = m_pieceOnTile[captureTile]->type;
-		Piece** const const enemyPiece = (m_blackToMove ? m_whitePiece : m_blackPiece);
+		Piece** enemyPiece = (m_blackToMove ? m_whitePiece : m_blackPiece);
 		const int8_t enemyPieceCnt = (m_blackToMove ? m_whiteTotalPiecesCnt : m_blackTotalPiecesCnt);
-		//Update pieces count, bitboards and pieces eval
-		if (m_blackToMove) {
-			m_whiteTotalPiecesCnt--;
-			m_whitePiecesCnt[type]--;
-			m_whiteBitboards[type] &= ~(1ULL << captureTile);
-			m_whiteAllPiecesBitboard &= ~(1ULL << captureTile);
-			m_whitePiecesEval -= pieceValue[type];
-		} else {
-			m_blackTotalPiecesCnt--;
-			m_blackPiecesCnt[type]--;
-			m_blackBitboards[type] &= ~(1ULL << captureTile);
-			m_blackAllPiecesBitboard &= ~(1ULL << captureTile);
-			m_blackPiecesEval -= pieceValue[type];
-		}
+		//Update bitboards and zHash; Note: here flip <0> with <1>, 
+		//because if black to move then white lost a piece
+		if (m_blackToMove) { updateDynamicVars<0>(type, captureTile, -1); }
+		else			   { updateDynamicVars<1>(type, captureTile, -1); }
 		capturedPieceIdx = m_pieceOnTile[captureTile]->idx;
 		//Swap piece with last one in array (size decreased by 1 above)
 		swap(enemyPiece[capturedPieceIdx], enemyPiece[enemyPieceCnt - 1]);
@@ -295,8 +267,6 @@ int8_t Position::makeMove(int16_t move) {
 		enemyPiece[enemyPieceCnt - 1]->idx = enemyPieceCnt - 1;
 		//Update pieceOnTile
 		m_pieceOnTile[captureTile] = nullptr;
-		//Update zobrist hash
-		zHash ^= hashNums[captureTile][!m_blackToMove][type];
 	}
 
 	//Update En Passant target
@@ -324,58 +294,40 @@ int8_t Position::makeMove(int16_t move) {
 	return capturedPieceIdx;
 }
 
-void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant) {
+void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_) {
 	//Update zobrist hash for castling and ep
 	if (m_possibleEnPassant != -1) {
 		zHash ^= hashNumsEp[m_possibleEnPassant & 0b111];
 	}
-	if (possibleEnPassant != -1) {
-		zHash ^= hashNumsEp[possibleEnPassant & 0b111];
+	if (possibleEnPassant_ != -1) {
+		zHash ^= hashNumsEp[possibleEnPassant_ & 0b111];
 	}
 	zHash ^= hashNumsCastling[m_bitmaskCastling];
-	zHash ^= hashNumsCastling[bitmaskCastling];
+	zHash ^= hashNumsCastling[bitmaskCastling_];
 	zHash ^= hashNumBlackToMove;
 
 	//Revert castling, ep and blackToMove
 	m_blackToMove = !m_blackToMove;
-	m_bitmaskCastling = bitmaskCastling;
-	m_possibleEnPassant = possibleEnPassant;
+	m_bitmaskCastling = bitmaskCastling_;
+	m_possibleEnPassant = possibleEnPassant_;
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
-	//Update bitboards
-	if (m_blackToMove) {
-		PieceType type = m_pieceOnTile[endTile]->type;
-		m_blackAllPiecesBitboard |= (1ULL << stTile);
-		m_blackAllPiecesBitboard &= ~(1ULL << endTile);
-		m_blackBitboards[type] |= (1ULL << stTile);
-		m_blackBitboards[type] &= ~(1ULL << endTile);
-	} else {
-		PieceType type = m_pieceOnTile[endTile]->type;
-		m_whiteAllPiecesBitboard |= (1ULL << stTile);
-		m_whiteAllPiecesBitboard &= ~(1ULL << endTile);
-		m_whiteBitboards[type] |= (1ULL << stTile);
-		m_whiteBitboards[type] &= ~(1ULL << endTile);
-	}
+	//Update bitboards; Flip stTile and endTile, because revering move;
+	//Don't update zHash before reverting promotion
+	if (m_blackToMove) { updateDynamicVars<1>(m_pieceOnTile[endTile]->type, endTile, stTile, false); }
+	else			   { updateDynamicVars<0>(m_pieceOnTile[endTile]->type, endTile, stTile, false); }
 	//If promotion -> revert to a pawn
 	if (getPromotionPiece(move) != PieceType::UNDEF) {
-		PieceType promotionType = m_pieceOnTile[endTile]->type;
+		const PieceType promotionType = m_pieceOnTile[endTile]->type;
 		m_pieceOnTile[endTile]->type = PieceType::PAWN;
-		//Update bitboards and pieces cnt
+		//Tell updateDynamicVars than promotionType piece "disappeared" and 
+		//then tell it that pawn appeared from nothing on the same square
 		if (m_blackToMove) {
-			m_blackBitboards[PAWN] |= (1ULL << stTile);
-			m_blackBitboards[promotionType] &= ~(1ULL << stTile);
-			m_blackPiecesCnt[promotionType]--;
-			m_blackPiecesCnt[PAWN]++;
-			m_blackPiecesEval += pieceValue[PAWN] - pieceValue[promotionType];
+			updateDynamicVars<1>(promotionType, stTile, -1);
+			updateDynamicVars<1>(PieceType::PAWN, -1, stTile);
 		} else {
-			m_whiteBitboards[PAWN] |= (1ULL << stTile);
-			m_whiteBitboards[promotionType] &= ~(1ULL << stTile);
-			m_whitePiecesCnt[promotionType]--;
-			m_whitePiecesCnt[PAWN]++;
-			m_whitePiecesEval += pieceValue[PAWN] - pieceValue[promotionType];
+			updateDynamicVars<0>(promotionType, stTile, -1);
+			updateDynamicVars<0>(PieceType::PAWN, -1, stTile);
 		}
-		//Update zobrist hash
-		zHash ^= hashNums[endTile][m_blackToMove][promotionType];
-		zHash ^= hashNums[endTile][m_blackToMove][PAWN];
 	}
 	//Check for castling (because also need to revert rook)
 	if (m_pieceOnTile[endTile]->type == PieceType::KING && abs(endTile - stTile) == 2) {
@@ -384,21 +336,9 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		m_pieceOnTile[rookEndTile]->setPos(rookStTile);
 		m_pieceOnTile[rookStTile] = m_pieceOnTile[rookEndTile];
 		m_pieceOnTile[rookEndTile] = nullptr;
-		//Update rook bitboard
-		if (m_blackToMove) {
-			m_blackAllPiecesBitboard &= ~(1ULL << rookEndTile);
-			m_blackAllPiecesBitboard |= (1ULL << rookStTile);
-			m_blackBitboards[ROOK] &= ~(1ULL << rookEndTile);
-			m_blackBitboards[ROOK] |= (1ULL << rookStTile);
-		} else {
-			m_whiteAllPiecesBitboard &= ~(1ULL << rookEndTile);
-			m_whiteAllPiecesBitboard |= (1ULL << rookStTile);
-			m_whiteBitboards[ROOK] &= ~(1ULL << rookEndTile);
-			m_whiteBitboards[ROOK] |= (1ULL << rookStTile);
-		}
-		//Update rook zobrist hash
-		zHash ^= hashNums[rookStTile][m_blackToMove][ROOK];
-		zHash ^= hashNums[rookEndTile][m_blackToMove][ROOK];
+		//Update rook bitboard, zHash and bonuses; Flip rookStTile and rookEndTile, because reverting
+		if (m_blackToMove) { updateDynamicVars<1>(PieceType::ROOK, rookEndTile, rookStTile); }
+		else			   { updateDynamicVars<0>(PieceType::ROOK, rookEndTile, rookStTile); }
 	}
 	//Update zobrist hash; important to do this AFTER reverting promotions to have correct hash
 	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[endTile]->type];
@@ -413,7 +353,7 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 	//Undo captures
 	int8_t captureTile = endTile;
 	//Check for en passant
-	if (m_pieceOnTile[stTile]->type == PieceType::PAWN && endTile == possibleEnPassant) {
+	if (m_pieceOnTile[stTile]->type == PieceType::PAWN && endTile == m_possibleEnPassant) {
 		captureTile += (m_blackToMove ? 8 : -8);
 	}
 	if (capturedPieceIdx != -1) {
@@ -426,23 +366,11 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		enemyPiece[enemyPiecesCnt]->idx = enemyPiecesCnt;
 		//Update pieceOnTile
 		m_pieceOnTile[captureTile] = enemyPiece[capturedPieceIdx];
-		//Update pieces count, bitboards, and pieces eval
+		//Update bb, zHash and bonuses; swap <0> and <1>, because black to 
+		//move == white lost a piece; stTile = -1, because this means revert capture
 		PieceType type = m_pieceOnTile[captureTile]->type;
-		if (m_blackToMove) {
-			m_whiteTotalPiecesCnt++;
-			m_whitePiecesCnt[type]++;
-			m_whiteBitboards[type] |= (1ULL << captureTile);
-			m_whiteAllPiecesBitboard |= (1ULL << captureTile);
-			m_whitePiecesEval += pieceValue[type];
-		} else {
-			m_blackTotalPiecesCnt++;
-			m_blackPiecesCnt[type]++;
-			m_blackBitboards[type] |= (1ULL << captureTile);
-			m_blackAllPiecesBitboard |= (1ULL << captureTile);
-			m_blackPiecesEval += pieceValue[type];
-		}
-		//Update zobrist hash
-		zHash ^= hashNums[captureTile][!m_blackToMove][type];
+		if (m_blackToMove) { updateDynamicVars<0>(type, -1, captureTile); }
+		else			   { updateDynamicVars<1>(type, -1, captureTile); }
 	}
 }
 

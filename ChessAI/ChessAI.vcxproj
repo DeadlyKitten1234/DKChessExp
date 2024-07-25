@@ -75,6 +75,8 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)\run\</OutDir>
+    <LinkIncremental>
+    </LinkIncremental>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -129,8 +131,8 @@
       <DebugInformationFormat>OldStyle</DebugInformationFormat>
       <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <OmitFramePointers>false</OmitFramePointers>
-      <EnableFiberSafeOptimizations>false</EnableFiberSafeOptimizations>
+      <OmitFramePointers>true</OmitFramePointers>
+      <EnableFiberSafeOptimizations>true</EnableFiberSafeOptimizations>
       <AssemblerOutput>NoListing</AssemblerOutput>
       <AssemblerListingLocation>&amp;(IntDir)</AssemblerListingLocation>
       <EnableParallelCodeGeneration>true</EnableParallelCodeGeneration>
@@ -140,6 +142,9 @@
       <MultiProcessorCompilation>false</MultiProcessorCompilation>
       <IntelJCCErratum>false</IntelJCCErratum>
       <CallingConvention>Cdecl</CallingConvention>
+      <DisableAnalyzeExternal>false</DisableAnalyzeExternal>
+      <AdditionalOptions>/Og %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -186,6 +191,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\include\AI.h" />
+    <ClInclude Include="..\include\EvalValues.h" />
     <ClInclude Include="..\include\GameManager.h" />
     <ClInclude Include="..\include\GraphicBoard.h" />
     <ClInclude Include="..\include\Drawable.h" />

@@ -1,9 +1,9 @@
 #pragma once
 #include "Piece.h"
-#include <algorithm>//min and max
+#include "EvalValues.h"
+#include <algorithm>//min
 using std::abs;
 using std::min;
-using std::max;
 class Position {
 public:
 	Position();
@@ -11,16 +11,14 @@ public:
 
 	void readFEN(const char* fen);
 
+	template<bool black>
+	//stTile == -1 means revert capture; endTile == -1 means make capture
+	inline void updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile, bool updateHash = true);
 	int8_t makeMove(int16_t move);//Returns captured piece idx
-	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling, int8_t possibleEnPassant);
+	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
 	template<bool capturesOnly>
 	void updateLegalMoves();
-	inline int16_t evaluate() {
-		int16_t eval = m_whitePiecesEval - m_blackPiecesEval;
-		eval += forceKingToEdgeEval<0>();
-		eval -= forceKingToEdgeEval<1>();
-		return eval * (m_blackToMove ? -1 : 1);
-	}
+	inline int16_t evaluate();
 
 	static void initLegalMoves();
 	static const char* m_startFEN;
@@ -29,8 +27,13 @@ public:
 	int16_t m_legalMovesStartIdx;
 	int16_t m_legalMovesCnt;
 
+	int16_t whiteEndgameWeight;
+	int16_t blackEndgameWeight;
+
 	int16_t m_whitePiecesEval;
 	int16_t m_blackPiecesEval;
+	int16_t m_whiteSqBonusEval;
+	int16_t m_blackSqBonusEval;
 
 	uint64_t zHash;//zobrist hash number
 	//Pieces
@@ -55,21 +58,67 @@ public:
 	uint64_t enemyPawnAttacksBitmask;//Call updateLegalMoves before trusting
 
 private:
-	const int16_t endgameMaterialStart = pieceValue[ROOK] + pieceValue[QUEEN] + pieceValue[BISHOP] * 2;
-	//Return range [0, 100]
-	inline int16_t getEndgameWeight() {
-		//Implementation of this function taken from Sebastian Lague
-		//https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V1-Unity/Assets/Scripts/Core/AI/Evaluation.cs
-		const int16_t pcsValueWithoutPawns = m_whitePiecesEval + m_blackPiecesEval - (m_whitePiecesCnt[PAWN] + m_blackPiecesCnt[PAWN]) * pieceValue[PAWN];
-		//return = 128 * (1 - (pcsValueWithoutPawns / endgameMaterialStart))
-		return max(0, ((endgameMaterialStart - pcsValueWithoutPawns) << 7) / endgameMaterialStart);
-	}
 	template<bool blackPerspective>
-	int16_t forceKingToEdgeEval();
+	inline int16_t forceKingToEdgeEval();
 	void deleteData();
 };
 
 #include "MoveGenerator.h"//Include hacks so doesn't CE. do not move to beggining of file
+
+template<bool black>
+inline void Position::updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile, bool updateHash) {
+	//if (stTile == -1) { revert capture; don't update start }
+	//if (endTile == -1) { make capture; don't update end }
+	//Which makes sense, stTile = -1 means piece "appeared from nowhere"
+						//endTile = -1 means piece "disappeared"
+	if constexpr (black) {
+		if (stTile != -1) {
+			m_blackAllPiecesBitboard &= ~(1ULL << stTile);
+			m_blackBitboards[type] &= ~(1ULL << stTile);
+		} else {
+			//Revert capture
+			m_blackTotalPiecesCnt++;
+			m_blackPiecesCnt[type]++;
+			m_blackPiecesEval += pieceValue[type];
+		}
+		if (endTile != -1) {
+			m_blackAllPiecesBitboard |= (1ULL << endTile);
+			m_blackBitboards[type] |= (1ULL << endTile);
+		} else {
+			//Make capture
+			m_blackTotalPiecesCnt--;
+			m_blackPiecesCnt[type]--;
+			m_blackPiecesEval -= pieceValue[type];
+		}
+	} else {
+		if (stTile != -1) {
+			m_whiteAllPiecesBitboard &= ~(1ULL << stTile);
+			m_whiteBitboards[type] &= ~(1ULL << stTile);
+		} else {
+			//Revert capture
+			m_whiteTotalPiecesCnt++;
+			m_whitePiecesCnt[type]++;
+			m_whitePiecesEval += pieceValue[type];
+		}
+		if (endTile != -1) {
+			m_whiteAllPiecesBitboard |= (1ULL << endTile);
+			m_whiteBitboards[type] |= (1ULL << endTile);
+		} else {
+			//Make capture
+			m_whiteTotalPiecesCnt--;
+			m_whitePiecesCnt[type]--;
+			m_whitePiecesEval -= pieceValue[type];
+		}
+	}
+	if (updateHash) {
+		if (stTile != -1) {
+			zHash ^= hashNums[stTile][black][type];
+		}
+		if (endTile != -1) {
+			zHash ^= hashNums[endTile][black][type];
+		}
+	}
+}
 
 template<bool capturesOnly>
 void Position::updateLegalMoves() {
@@ -78,11 +127,26 @@ void Position::updateLegalMoves() {
 	enemyPawnAttacksBitmask = pawnAtt;//pawnAtt declared in MoveGenerator.h
 }
 
+inline int16_t Position::evaluate() {
+	int16_t eval = m_whitePiecesEval - m_blackPiecesEval;
+	eval += forceKingToEdgeEval<0>();
+	eval -= forceKingToEdgeEval<1>();
+	return eval * (m_blackToMove ? -1 : 1);
+
+}
+
 template<bool blackPerspective>
 inline int16_t Position::forceKingToEdgeEval() {
 	//Idea and implementation of this function and getEndgameWeight() taken from Sebastian Lague
 	//https://github.com/SebLague/Chess-Coding-Adventure/blob/Chess-V1-Unity/Assets/Scripts/Core/AI/Evaluation.cs
-	int16_t endgameWeight = getEndgameWeight();
+	int16_t friendlyEvalNoPawns;
+	if constexpr (!blackPerspective) {
+		friendlyEvalNoPawns = m_whitePiecesEval - m_whitePiecesCnt[PAWN] * pieceValue[PAWN];
+	} else {
+		friendlyEvalNoPawns = m_blackPiecesEval - m_blackPiecesCnt[PAWN] * pieceValue[PAWN];
+	}
+
+	int16_t endgameWeight = getEndgameWeight(friendlyEvalNoPawns);
 	bool worthEvaluating = 0;
 	if constexpr (blackPerspective) {
 		worthEvaluating = m_blackPiecesEval >= (m_whitePiecesEval + pieceValue[PAWN] * 2);
