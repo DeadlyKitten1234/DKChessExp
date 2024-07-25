@@ -13,9 +13,7 @@ enum PieceType : int8_t {
 	UNDEF = 6
 };
 
-const int16_t pieceValue[6] = { /*King value: INF = 10000*/10000, 1220, 400, 375, 610, 100 };
-
-extern class Position;
+class Position;
 
 class Piece {
 public:

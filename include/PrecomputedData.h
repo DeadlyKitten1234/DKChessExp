@@ -36,7 +36,7 @@ extern uint64_t castlingImportantSquares[4];//First white; First kingside
 extern uint64_t rookMovesLookup[64][4096];
 extern uint64_t bishopMovesLookup[64][4096];
 //sz = 256, because i couldn't find numbers that fit in 8, 16, 32, 64, 128
-extern uint64_t kingMovesCntLookup[64][256];//Also a magic hash lookup table; 
+extern uint8_t kingMovesCntLookup[64][256];//Also a magic hash lookup table; 
 extern uint64_t rookMagic[64];
 extern uint64_t bishopMagic[64];
 extern uint64_t kingMagic[64];

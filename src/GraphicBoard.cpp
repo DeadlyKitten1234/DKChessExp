@@ -86,7 +86,7 @@ void GraphicBoard::draw(int2 mouseCoords) {
 	}
 	if (m_selectedPiecePos != -1 && m_draggingSelectedPiece) {
 		const Piece* selPiece = m_pos->m_pieceOnTile[m_selectedPiecePos];
-		SDL_Rect pieceRect = { mouseCoords.x - tileSz * 0.7, mouseCoords.y - tileSz * 0.7, tileSz * 1.4, tileSz * 1.4 };
+		SDL_Rect pieceRect = { int(mouseCoords.x - tileSz * 0.7), int(mouseCoords.y - tileSz * 0.7), int(tileSz * 1.4), int(tileSz * 1.4) };
 		Presenter::drawPiece(selPiece->type, pieceRect, selPiece->black);
 	}
 }

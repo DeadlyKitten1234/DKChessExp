@@ -56,14 +56,7 @@ public:
 class TTEntryChunk {
 public:
 	TTEntryChunk() {}
-	~TTEntryChunk() {
-		if (entry != nullptr) {
-			delete[] entry;
-		}
-		if (garbageBytesSoSizeIs32Bytes != nullptr) {
-			delete[] garbageBytesSoSizeIs32Bytes;
-		}
-	}
+	~TTEntryChunk() {}
 
 	TTEntry entry[3];
 	char garbageBytesSoSizeIs32Bytes[2];
@@ -96,7 +89,7 @@ public:
 };
 
 inline TTEntry* TranspositionTable::find(const uint64_t key, bool& found) const {
-	const int idx = key >> shRVal;
+	const int idx = int(key >> shRVal);
 	TTEntry* const entriesInChunk = chunk[idx].entry;
 	
 	//This was coded on MSVS and for some reason VC didn't want to unroll loops
