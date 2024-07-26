@@ -8,6 +8,10 @@ using std::max;
 const int16_t pieceValue[6] = { /*King value: INF = 10000*/10000, 1220, 400, 375, 610, 100 };
 
 //Values taken from https://www.chessprogramming.org/Simplified_Evaluation_Function
+//IMPORTANT: These values are formated like we see the board; But to the computer, 
+//these are flipped; Example: sqBonusMidgame[pt][0] we see as the left value but to the
+//computer square 0 means bottom left square; Because the values are symetric l to r we can
+//use these values directly when evaluating black and can use [63-sq] when evaluating white
 const int8_t sqBonusMidgame[6][64] = {
 	//King
 	{
@@ -107,16 +111,23 @@ inline int16_t getEndgameWeight(const int16_t friendlyEvalNoPawns) {
 inline int16_t getEndgameWeight(const int16_t friendlyEval, const int8_t friendlyPawnsCnt) {
 	return getEndgameWeight(friendlyEval - friendlyPawnsCnt * pieceValue[PAWN]);
 }
-
+template<bool black>
 inline int8_t getSqBonus(const PieceType pt, const int8_t sq) {
-	return sqBonusMidgame[pt][sq];
+	if constexpr (black) {
+		return sqBonusMidgame[pt][sq];
+	}
+	return sqBonusMidgame[pt][63 - sq];
 }
 
 //Could later change to sigmoid function
-inline int8_t getKingSqBonus(const int8_t sq, const int16_t endgameWeight = 0) {
+template<bool black>
+inline int8_t getKingSqBonus(int8_t sq, const int16_t endgameWeight = 0) {
+	if constexpr (!black) {
+		sq = 63 - sq;
+	}
 	//Don't waste time, because * is slower than ==
 	if (endgameWeight == 0) {
-		return sqKingBonusEndgame[sq];
+		return sqBonusMidgame[KING][kingSq];
 	}
-	return (sqKingBonusEndgame[sq] * (128 - endgameWeight) + sqKingBonusEndgame[sq] * endgameWeight) >> 7;
+	return (sqBonusMidgame[KING][kingSq] * (128 - endgameWeight) + sqKingBonusEndgame[kingSq] * endgameWeight) >> 7;
 }

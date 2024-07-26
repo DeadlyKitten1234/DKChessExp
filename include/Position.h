@@ -75,7 +75,7 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 		if (stTile != -1) {
 			m_blackAllPiecesBitboard &= ~(1ULL << stTile);
 			m_blackBitboards[type] &= ~(1ULL << stTile);
-			m_blackSqBonusEval -= getSqBonus(type, stTile);
+			m_blackSqBonusEval -= getSqBonus<1>(type, stTile);
 		} else {
 			//Revert capture
 			m_blackTotalPiecesCnt++;
@@ -85,7 +85,7 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 		if (endTile != -1) {
 			m_blackAllPiecesBitboard |= (1ULL << endTile);
 			m_blackBitboards[type] |= (1ULL << endTile);
-			m_blackSqBonusEval += getSqBonus(type, endTile);
+			m_blackSqBonusEval += getSqBonus<1>(type, endTile);
 		} else {
 			//Make capture
 			m_blackTotalPiecesCnt--;
@@ -96,7 +96,7 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 		if (stTile != -1) {
 			m_whiteAllPiecesBitboard &= ~(1ULL << stTile);
 			m_whiteBitboards[type] &= ~(1ULL << stTile);
-			m_whiteSqBonusEval -= getSqBonus(type, stTile);
+			m_whiteSqBonusEval -= getSqBonus<0>(type, stTile);
 		} else {
 			//Revert capture
 			m_whiteTotalPiecesCnt++;
@@ -106,7 +106,7 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 		if (endTile != -1) {
 			m_whiteAllPiecesBitboard |= (1ULL << endTile);
 			m_whiteBitboards[type] |= (1ULL << endTile);
-			m_whiteSqBonusEval += getSqBonus(type, endTile);
+			m_whiteSqBonusEval += getSqBonus<0>(type, endTile);
 		} else {
 			//Make capture
 			m_whiteTotalPiecesCnt--;
@@ -130,9 +130,12 @@ void Position::updateLegalMoves() {
 }
 
 inline int16_t Position::evaluate() {
+	//Add pieces
 	int16_t eval = m_whitePiecesEval - m_blackPiecesEval;
-	eval += forceKingToEdgeEval<0>();
-	eval -= forceKingToEdgeEval<1>();
+	//Add sq bonuses
+	eval += m_whiteSqBonusEval - m_blackSqBonusEval;
+	//Force king to edge in the endgame
+	eval += forceKingToEdgeEval<0>() - forceKingToEdgeEval<1>();
 	return eval * (m_blackToMove ? -1 : 1);
 
 }

@@ -175,10 +175,10 @@ void Position::readFEN(const char* fen) {
 	blackEndgameWeight = getEndgameWeight(m_blackPiecesEval, m_blackPiecesCnt[PAWN]);
 	//Set bonuses for sq; Note: evaluate king as if it isn't endgame, because in eval will change it
 	for (int8_t i = 0; i < m_whiteTotalPiecesCnt; i++) {
-		m_whiteSqBonusEval += getSqBonus(m_whitePiece[i]->type, m_whitePiece[i]->pos);
+		m_whiteSqBonusEval += getSqBonus<0>(m_whitePiece[i]->type, m_whitePiece[i]->pos);
 	}
 	for (int8_t i = 0; i < m_blackTotalPiecesCnt; i++) {
-		m_blackSqBonusEval += getSqBonus(m_blackPiece[i]->type, m_blackPiece[i]->pos);
+		m_blackSqBonusEval += getSqBonus<1>(m_blackPiece[i]->type, m_blackPiece[i]->pos);
 	}
 	//Set zobrist hash; Do it here for the same reason as setting indices
 	zHash = getPositionHash(*this);

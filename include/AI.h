@@ -220,6 +220,13 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
 		PieceType pt = pos->m_pieceOnTile[stPos]->type;
 		int curGuess = 0;
+		//Add bonuses; Have to have if(black) here, because template doesn't accept it as argument
+		if (pos->m_blackToMove) {
+			curGuess += getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos);
+		} else {
+			curGuess += getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos);
+		}
+
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
 			//13 * capturedPieceVal to prioritise captures before non-captures and 
