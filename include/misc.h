@@ -20,6 +20,17 @@ inline int8_t getLSBPos(const uint64_t bitmask) {
 	return idx;
 }
 
+inline int8_t floorLog2(int num) {
+	while (num) {
+		int8_t ans = getLSBPos(num);
+		num &= num - 1;
+		if (num == 0) {
+			return ans;
+		}
+	}
+	return 0;
+}
+
 inline int8_t countOnes(uint64_t bitmask) {
 	int8_t ans = 0;
 	while (bitmask) {

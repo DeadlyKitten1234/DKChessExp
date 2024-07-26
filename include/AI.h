@@ -19,6 +19,7 @@ public:
 
 	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
 	int* evalGuess;//Used for ordering moves
+	int historyHeuristic[2][64][64];
 
 	int16_t bestMove;
 
@@ -27,6 +28,12 @@ public:
 };
 
 inline int16_t AI::iterativeDeepening(int8_t depth) {
+	for (int8_t i = 0; i < 64; i++) {
+		for (int8_t j = 0; j < 64; j++) {
+			historyHeuristic[0][i][j] = 0;
+			historyHeuristic[1][i][j] = 0;
+		}
+	}
 	int16_t eval = 0;
 	for (int8_t i = 2; i < depth; i++) {
 		eval = search(depth, -pieceValue[KING] - 1, pieceValue[KING] + 1);
@@ -114,6 +121,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
 			}
+			historyHeuristic[pos->m_blackToMove][getStartPos(curMove)][getEndPos(curMove)] += depth * depth * depth;
 			return beta;
 		}
 		//Best move
@@ -204,15 +212,14 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 	const int8_t enemyKingPos = (pos->m_blackToMove ? pos->m_whitePiece[0]->pos : pos->m_blackPiece[0]->pos);
 	uint64_t checksToKing[6] = {
 		0,//King can't check another king
-		0,//Queen will be redundant if evaluated with rook and bishop, so after arr init do bitwise or
+		0,//Queen will be redundant if evaluated with rook and bishop, so after arr init do bitwise |
 		attacks<BISHOP>(enemyKingPos, allPcs),
 		attacks<KNIGHT>(enemyKingPos, allPcs),
 		attacks<ROOK>(enemyKingPos, allPcs),
-		0/*maybe later add pawns*/
+		0//maybe later add pawns
 	};
 	//Queen checks = rook checks | bishop checks
 	checksToKing[QUEEN] = checksToKing[BISHOP] | checksToKing[ROOK];
-
 	for (int16_t i = startIdx; i < endIdx; i++) {
 		//Note: here we only guess how good a move is, so we can afford to make
 		//guesses overinflated since the only thing that matters is their relative values
@@ -222,10 +229,13 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		int curGuess = 0;
 		//Add bonuses; Have to have if(black) here, because template doesn't accept it as argument
 		if (pos->m_blackToMove) {
-			curGuess += getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos);
+			curGuess += 4 * (getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos));
 		} else {
-			curGuess += getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos);
+			curGuess += 4 * (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos));
 		}
+		//Add history heuristic
+		int flog2 = floorLog2(historyHeuristic[pos->m_blackToMove][stPos][endPos]);
+		curGuess += flog2 * flog2 / 16;
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
@@ -248,9 +258,9 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		}
 		//Favor checks slightly
 		if (checksToKing[pt] & (1ULL << endPos)) {
-			//Add pieceValue[piece to make move] / 32, because generally checks with
+			//Add pieceValue[piece to make move] / 16, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
-			curGuess += 75 + (pieceValue[pt] >> 5);
+			curGuess += 75 + (pieceValue[pt] >> 4);
 		}
 
 		//Favor move in tt
