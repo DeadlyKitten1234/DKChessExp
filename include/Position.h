@@ -27,8 +27,8 @@ public:
 	int16_t m_legalMovesStartIdx;
 	int16_t m_legalMovesCnt;
 
-	int16_t whiteEndgameWeight;
-	int16_t blackEndgameWeight;
+	int16_t whiteEndgameWeight;//If = -1 means needs an update
+	int16_t blackEndgameWeight;//If = -1 means needs an update
 
 	int16_t m_whitePiecesEval;
 	int16_t m_blackPiecesEval;
@@ -134,6 +134,23 @@ inline int16_t Position::evaluate() {
 	int16_t eval = m_whitePiecesEval - m_blackPiecesEval;
 	//Add sq bonuses
 	eval += m_whiteSqBonusEval - m_blackSqBonusEval;
+	//If endgame eval is marked as 'needs update', update it
+	if (whiteEndgameWeight == -1) {
+		whiteEndgameWeight = getEndgameWeight(m_whitePiecesEval, m_whitePiecesCnt[PAWN]);
+	}
+	if (blackEndgameWeight == -1) {
+		blackEndgameWeight = getEndgameWeight(m_blackPiecesEval, m_blackPiecesCnt[PAWN]);
+	}
+	//Change king bonuses according to endgame weight; If is there to save time
+	if (whiteEndgameWeight != 0) {
+		eval -= getSqBonus<0>(KING, m_whitePiece[0]->pos);//Remove old bonus
+		eval += getKingSqBonus<0>(m_whitePiece[0]->pos, whiteEndgameWeight);//Add new bonus
+	}
+	if (blackEndgameWeight != 0) {
+		//Signs are flipped, because black
+		eval += getSqBonus<1>(KING, m_blackPiece[0]->pos);//Remove old bonus
+		eval -= getKingSqBonus<1>(m_blackPiece[0]->pos, blackEndgameWeight);//Add new bonus
+	}
 	//Force king to edge in the endgame
 	eval += forceKingToEdgeEval<0>() - forceKingToEdgeEval<1>();
 	return eval * (m_blackToMove ? -1 : 1);

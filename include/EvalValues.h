@@ -127,7 +127,7 @@ inline int8_t getKingSqBonus(int8_t sq, const int16_t endgameWeight = 0) {
 	}
 	//Don't waste time, because * is slower than ==
 	if (endgameWeight == 0) {
-		return sqBonusMidgame[KING][kingSq];
+		return sqBonusMidgame[KING][sq];
 	}
-	return (sqBonusMidgame[KING][kingSq] * (128 - endgameWeight) + sqKingBonusEndgame[kingSq] * endgameWeight) >> 7;
+	return (sqBonusMidgame[KING][sq] * (128 - endgameWeight) + sqKingBonusEndgame[sq] * endgameWeight) >> 7;
 }

@@ -30,8 +30,8 @@ Position::Position() {
 	enemyPawnAttacksBitmask = 0;
 	m_whiteSqBonusEval = 0;
 	m_blackSqBonusEval = 0;
-	whiteEndgameWeight = 0;
-	blackEndgameWeight = 0;
+	whiteEndgameWeight = -1;
+	blackEndgameWeight = -1;
 }
 
 Position::~Position() {
@@ -57,8 +57,8 @@ void Position::readFEN(const char* fen) {
 	m_blackToMove = 0;
 	m_whitePiecesEval = 0;
 	m_blackPiecesEval = 0;
-	whiteEndgameWeight = 0;
-	blackEndgameWeight = 0;
+	whiteEndgameWeight = -1;
+	blackEndgameWeight = -1;
 	int8_t xPos = 0;
 	int8_t yPos = 7;
 	int i = 0;
@@ -136,15 +136,31 @@ void Position::readFEN(const char* fen) {
 		m_blackToMove = 0;
 	}
 	i += 2;
-	for (i = i; fen[i]; i++) {
+	for (; fen[i]; i++) {
 		if (fen[i] == ' ') {
 			i++;
 			break;
 		}
-		if (fen[i] == 'K') { m_bitmaskCastling |= 8; }
-		if (fen[i] == 'Q') { m_bitmaskCastling |= 4; }
-		if (fen[i] == 'k') { m_bitmaskCastling |= 2; }
-		if (fen[i] == 'q') { m_bitmaskCastling |= 1; }
+		if (fen[i] == 'K' && m_whitePiece[0]->pos == 4 && m_pieceOnTile[7] != nullptr) {
+			if (m_pieceOnTile[7]->type == ROOK && m_pieceOnTile[7]->black == 0) {
+				m_bitmaskCastling |= 8;
+			}
+		}
+		if (fen[i] == 'Q' && m_whitePiece[0]->pos == 4 && m_pieceOnTile[0] != nullptr) {
+			if (m_pieceOnTile[0]->type == ROOK && m_pieceOnTile[0]->black == 0) {
+				m_bitmaskCastling |= 4;
+			}
+		}
+		if (fen[i] == 'k' && m_blackPiece[0]->pos == 60 && m_pieceOnTile[63] != nullptr) {
+			if (m_pieceOnTile[63]->type == ROOK && m_pieceOnTile[63]->black == 1) {
+				m_bitmaskCastling |= 2;
+			}
+		}
+		if (fen[i] == 'q' && m_blackPiece[0]->pos == 60 && m_pieceOnTile[56] != nullptr) {
+			if (m_pieceOnTile[56]->type == ROOK && m_pieceOnTile[56]->black == 1) {
+				m_bitmaskCastling |= 1;
+			}
+		}
 	}
 	if (!(fen[i] == ' ' || fen[i] == '-')) {
 		m_possibleEnPassant = 0;
@@ -240,9 +256,11 @@ int8_t Position::makeMove(int16_t move) {
 		if (m_blackToMove) {
 			updateDynamicVars<1>(PieceType::PAWN, endTile, -1);
 			updateDynamicVars<1>(promotionType, -1, endTile);
+			blackEndgameWeight = -1;//Mark endgame weight as 'needs update'
 		} else {
 			updateDynamicVars<0>(PieceType::PAWN, endTile, -1);
 			updateDynamicVars<0>(promotionType, -1, endTile);
+			whiteEndgameWeight = -1;//Mark endgame weight as 'needs update'
 		}
 	}
 	//En Passant
@@ -257,8 +275,13 @@ int8_t Position::makeMove(int16_t move) {
 		const int8_t enemyPieceCnt = (m_blackToMove ? m_whiteTotalPiecesCnt : m_blackTotalPiecesCnt);
 		//Update bitboards and zHash; Note: here flip <0> with <1>, 
 		//because if black to move then white lost a piece
-		if (m_blackToMove) { updateDynamicVars<0>(type, captureTile, -1); }
-		else { updateDynamicVars<1>(type, captureTile, -1); }
+		if (m_blackToMove) {
+			updateDynamicVars<0>(type, captureTile, -1);
+			blackEndgameWeight = -1;//Mark endgame weight as 'needs update'
+		} else {
+			updateDynamicVars<1>(type, captureTile, -1);
+			whiteEndgameWeight = -1;//Mark endgame weight as 'needs update'
+		}
 		capturedPieceIdx = m_pieceOnTile[captureTile]->idx;
 		//Swap piece with last one in array (size decreased by 1 above)
 		swap(enemyPiece[capturedPieceIdx], enemyPiece[enemyPieceCnt - 1]);
@@ -320,9 +343,11 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		if (m_blackToMove) {
 			updateDynamicVars<1>(promotionType, endTile, -1);
 			updateDynamicVars<1>(PieceType::PAWN, -1, endTile);
+			blackEndgameWeight = -1;//Mark endgame weight as 'needs update'
 		} else {
 			updateDynamicVars<0>(promotionType, endTile, -1);
 			updateDynamicVars<0>(PieceType::PAWN, -1, endTile);
+			whiteEndgameWeight = -1;//Mark endgame weight as 'needs update'
 		}
 	}
 	//Check for castling (because also need to revert rook)
@@ -366,8 +391,13 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		//Update bb, zHash and bonuses; swap <0> and <1>, because black to 
 		//move == white lost a piece; stTile = -1, because this means revert capture
 		PieceType type = m_pieceOnTile[captureTile]->type;
-		if (m_blackToMove) { updateDynamicVars<0>(type, -1, captureTile); }
-		else { updateDynamicVars<1>(type, -1, captureTile); }
+		if (m_blackToMove) {
+			updateDynamicVars<0>(type, -1, captureTile);
+			blackEndgameWeight = -1;//Mark endgame weight as 'needs update'
+		} else {
+			updateDynamicVars<1>(type, -1, captureTile);
+			whiteEndgameWeight = -1;//Mark endgame weight as 'needs update'
+		}
 	}
 }
 
