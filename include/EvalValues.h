@@ -108,15 +108,15 @@ inline int16_t getEndgameWeight(const int16_t friendlyEval, const int8_t friendl
 	return getEndgameWeight(friendlyEval - friendlyPawnsCnt * pieceValue[PAWN]);
 }
 
+inline int8_t getSqBonus(const PieceType pt, const int8_t sq) {
+	return sqBonusMidgame[pt][sq];
+}
+
 //Could later change to sigmoid function
-inline int8_t getSqBonus(const PieceType pt, const int8_t sq, const int16_t endgameWeight = 0) {
-	if (pt == KING ) {
-		//Don't waste time, because * is slower than ==
-		if (endgameWeight == 0) {
-			return sqKingBonusEndgame[sq];
-		}
-		return (sqKingBonusEndgame[sq] * (128 - endgameWeight) + sqKingBonusEndgame[sq] * endgameWeight) >> 7;
-	} else {
-		return sqBonusMidgame[pt][sq];
+inline int8_t getKingSqBonus(const int8_t sq, const int16_t endgameWeight = 0) {
+	//Don't waste time, because * is slower than ==
+	if (endgameWeight == 0) {
+		return sqKingBonusEndgame[sq];
 	}
+	return (sqKingBonusEndgame[sq] * (128 - endgameWeight) + sqKingBonusEndgame[sq] * endgameWeight) >> 7;
 }

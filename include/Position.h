@@ -13,7 +13,7 @@ public:
 
 	template<bool black>
 	//stTile == -1 means revert capture; endTile == -1 means make capture
-	inline void updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile, bool updateHash = true);
+	inline void updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile);
 	int8_t makeMove(int16_t move);//Returns captured piece idx
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
 	template<bool capturesOnly>
@@ -26,6 +26,9 @@ public:
 	static int16_t* m_legalMoves;
 	int16_t m_legalMovesStartIdx;
 	int16_t m_legalMovesCnt;
+
+	int16_t whiteEndgameWeight;
+	int16_t blackEndgameWeight;
 
 	int16_t m_whitePiecesEval;
 	int16_t m_blackPiecesEval;
@@ -63,15 +66,37 @@ private:
 #include "MoveGenerator.h"//Include hacks so doesn't CE. do not move to beggining of file
 
 template<bool black>
-inline void Position::updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile, bool updateHash) {
-	//if (stTile == -1) { revert capture; don't update start }
-	//if (endTile == -1) { make capture; don't update end }
+inline void Position::updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile) {
+	//If stTile == -1 { revert capture; don't update start }
+	//If endTile == -1 { make capture; don't update end }
 	//Which makes sense, stTile = -1 means piece "appeared from nowhere"
 						//endTile = -1 means piece "disappeared"
-	if constexpr (!black) {
+	if constexpr (black) {
+		if (stTile != -1) {
+			m_blackAllPiecesBitboard &= ~(1ULL << stTile);
+			m_blackBitboards[type] &= ~(1ULL << stTile);
+			m_blackSqBonusEval -= getSqBonus(type, stTile);
+		} else {
+			//Revert capture
+			m_blackTotalPiecesCnt++;
+			m_blackPiecesCnt[type]++;
+			m_blackPiecesEval += pieceValue[type];
+		}
+		if (endTile != -1) {
+			m_blackAllPiecesBitboard |= (1ULL << endTile);
+			m_blackBitboards[type] |= (1ULL << endTile);
+			m_blackSqBonusEval += getSqBonus(type, endTile);
+		} else {
+			//Make capture
+			m_blackTotalPiecesCnt--;
+			m_blackPiecesCnt[type]--;
+			m_blackPiecesEval -= pieceValue[type];
+		}
+	} else {
 		if (stTile != -1) {
 			m_whiteAllPiecesBitboard &= ~(1ULL << stTile);
 			m_whiteBitboards[type] &= ~(1ULL << stTile);
+			m_whiteSqBonusEval -= getSqBonus(type, stTile);
 		} else {
 			//Revert capture
 			m_whiteTotalPiecesCnt++;
@@ -81,6 +106,7 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 		if (endTile != -1) {
 			m_whiteAllPiecesBitboard |= (1ULL << endTile);
 			m_whiteBitboards[type] |= (1ULL << endTile);
+			m_whiteSqBonusEval += getSqBonus(type, endTile);
 		} else {
 			//Make capture
 			m_whiteTotalPiecesCnt--;
@@ -88,35 +114,11 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 			m_whitePiecesEval -= pieceValue[type];
 		}
 	}
-	if constexpr (black) {
-		if (stTile != -1) {
-			m_blackAllPiecesBitboard &= ~(1ULL << stTile);
-			m_blackBitboards[type] &= ~(1ULL << stTile);
-		}
-		else {
-			//Revert capture
-			m_blackTotalPiecesCnt++;
-			m_blackPiecesCnt[type]++;
-			m_blackPiecesEval += pieceValue[type];
-		}
-		if (endTile != -1) {
-			m_blackAllPiecesBitboard |= (1ULL << endTile);
-			m_blackBitboards[type] |= (1ULL << endTile);
-		}
-		else {
-			//Make capture
-			m_blackTotalPiecesCnt--;
-			m_blackPiecesCnt[type]--;
-			m_blackPiecesEval -= pieceValue[type];
-		}
+	if (stTile != -1) {
+		zHash ^= hashNums[stTile][black][type];
 	}
-	if (updateHash) {
-		if (stTile != -1) {
-			zHash ^= hashNums[stTile][black][type];
-		}
-		if (endTile != -1) {
-			zHash ^= hashNums[endTile][black][type];
-		}
+	if (endTile != -1) {
+		zHash ^= hashNums[endTile][black][type];
 	}
 }
 
