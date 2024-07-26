@@ -30,8 +30,6 @@ Position::Position() {
 	enemyPawnAttacksBitmask = 0;
 	m_whiteSqBonusEval = 0;
 	m_blackSqBonusEval = 0;
-	whiteEndgameWeight = 0;
-	blackEndgameWeight = 0;
 }
 
 Position::~Position() {
@@ -57,8 +55,6 @@ void Position::readFEN(const char* fen) {
 	m_blackToMove = 0;
 	m_whitePiecesEval = 0;
 	m_blackPiecesEval = 0;
-	whiteEndgameWeight = 0;
-	blackEndgameWeight = 0;
 	int8_t xPos = 0;
 	int8_t yPos = 7;
 	int i = 0;
@@ -171,8 +167,6 @@ void Position::readFEN(const char* fen) {
 	for (int8_t i = 0; i < m_blackTotalPiecesCnt; i++) {
 		m_blackPiece[i]->idx = i;
 	}
-	whiteEndgameWeight = getEndgameWeight(m_whitePiecesEval, m_whitePiecesCnt[PAWN]);
-	blackEndgameWeight = getEndgameWeight(m_blackPiecesEval, m_blackPiecesCnt[PAWN]);
 	//Set bonuses for sq; Note: evaluate king as if it isn't endgame, because in eval will change it
 	for (int8_t i = 0; i < m_whiteTotalPiecesCnt; i++) {
 		m_whiteSqBonusEval += getSqBonus(m_whitePiece[i]->type,m_whitePiece[i]->pos);
@@ -311,10 +305,6 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 	m_bitmaskCastling = bitmaskCastling_;
 	m_possibleEnPassant = possibleEnPassant_;
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
-	//Update bitboards; Flip stTile and endTile, because revering move;
-	//Don't update zHash before reverting promotion
-	if (m_blackToMove) { updateDynamicVars<1>(m_pieceOnTile[endTile]->type, endTile, stTile, false); }
-	else			   { updateDynamicVars<0>(m_pieceOnTile[endTile]->type, endTile, stTile, false); }
 	//If promotion -> revert to a pawn
 	if (getPromotionPiece(move) != PieceType::UNDEF) {
 		const PieceType promotionType = m_pieceOnTile[endTile]->type;
@@ -322,11 +312,11 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		//Tell updateDynamicVars than promotionType piece "disappeared" and 
 		//then tell it that pawn appeared from nothing on the same square
 		if (m_blackToMove) {
-			updateDynamicVars<1>(promotionType, stTile, -1);
-			updateDynamicVars<1>(PieceType::PAWN, -1, stTile);
+			updateDynamicVars<1>(promotionType, endTile, -1);
+			updateDynamicVars<1>(PieceType::PAWN, -1, endTile);
 		} else {
-			updateDynamicVars<0>(promotionType, stTile, -1);
-			updateDynamicVars<0>(PieceType::PAWN, -1, stTile);
+			updateDynamicVars<0>(promotionType, endTile, -1);
+			updateDynamicVars<0>(PieceType::PAWN, -1, endTile);
 		}
 	}
 	//Check for castling (because also need to revert rook)
@@ -340,9 +330,11 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 		if (m_blackToMove) { updateDynamicVars<1>(PieceType::ROOK, rookEndTile, rookStTile); }
 		else			   { updateDynamicVars<0>(PieceType::ROOK, rookEndTile, rookStTile); }
 	}
-	//Update zobrist hash; important to do this AFTER reverting promotions to have correct hash
-	zHash ^= hashNums[stTile][m_blackToMove][m_pieceOnTile[endTile]->type];
-	zHash ^= hashNums[endTile][m_blackToMove][m_pieceOnTile[endTile]->type];
+	//Update bitboards; Flip stTile and endTile, because revering move;
+	//important to do this AFTER reverting promotions to have correct hash
+	if (m_blackToMove) { updateDynamicVars<1>(m_pieceOnTile[endTile]->type, endTile, stTile); }
+	else { updateDynamicVars<0>(m_pieceOnTile[endTile]->type, endTile, stTile); }
+	//Update zobrist hash; 
 	//Update pieceOnTile;
 	//its important to do it before undo-ing
 	//captures to not overwrite piece with captured one

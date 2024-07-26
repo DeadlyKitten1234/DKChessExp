@@ -27,9 +27,6 @@ public:
 	int16_t m_legalMovesStartIdx;
 	int16_t m_legalMovesCnt;
 
-	int16_t whiteEndgameWeight;
-	int16_t blackEndgameWeight;
-
 	int16_t m_whitePiecesEval;
 	int16_t m_blackPiecesEval;
 	int16_t m_whiteSqBonusEval;
@@ -71,26 +68,7 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 	//if (endTile == -1) { make capture; don't update end }
 	//Which makes sense, stTile = -1 means piece "appeared from nowhere"
 						//endTile = -1 means piece "disappeared"
-	if constexpr (black) {
-		if (stTile != -1) {
-			m_blackAllPiecesBitboard &= ~(1ULL << stTile);
-			m_blackBitboards[type] &= ~(1ULL << stTile);
-		} else {
-			//Revert capture
-			m_blackTotalPiecesCnt++;
-			m_blackPiecesCnt[type]++;
-			m_blackPiecesEval += pieceValue[type];
-		}
-		if (endTile != -1) {
-			m_blackAllPiecesBitboard |= (1ULL << endTile);
-			m_blackBitboards[type] |= (1ULL << endTile);
-		} else {
-			//Make capture
-			m_blackTotalPiecesCnt--;
-			m_blackPiecesCnt[type]--;
-			m_blackPiecesEval -= pieceValue[type];
-		}
-	} else {
+	if constexpr (!black) {
 		if (stTile != -1) {
 			m_whiteAllPiecesBitboard &= ~(1ULL << stTile);
 			m_whiteBitboards[type] &= ~(1ULL << stTile);
@@ -108,6 +86,28 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 			m_whiteTotalPiecesCnt--;
 			m_whitePiecesCnt[type]--;
 			m_whitePiecesEval -= pieceValue[type];
+		}
+	}
+	if constexpr (black) {
+		if (stTile != -1) {
+			m_blackAllPiecesBitboard &= ~(1ULL << stTile);
+			m_blackBitboards[type] &= ~(1ULL << stTile);
+		}
+		else {
+			//Revert capture
+			m_blackTotalPiecesCnt++;
+			m_blackPiecesCnt[type]++;
+			m_blackPiecesEval += pieceValue[type];
+		}
+		if (endTile != -1) {
+			m_blackAllPiecesBitboard |= (1ULL << endTile);
+			m_blackBitboards[type] |= (1ULL << endTile);
+		}
+		else {
+			//Make capture
+			m_blackTotalPiecesCnt--;
+			m_blackPiecesCnt[type]--;
+			m_blackPiecesEval -= pieceValue[type];
 		}
 	}
 	if (updateHash) {
