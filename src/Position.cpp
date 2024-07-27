@@ -202,6 +202,60 @@ void Position::readFEN(const char* fen) {
 	updateLegalMoves<0>();
 }
 
+uint64_t Position::getZHashIfMoveMade(const int16_t move) const {
+	const int8_t stTile = getStartPos(move), endTile = getEndPos(move);
+	const PieceType pt = m_pieceOnTile[stTile]->type;
+	//Moving always changes player on turn
+	uint64_t ans = zHash ^ hashNumBlackToMove;
+	ans ^= hashNums[stTile][m_blackToMove][pt];
+	ans ^= hashNums[endTile][m_blackToMove][pt];
+	int8_t captureTile = endTile;
+	//Handle en passant
+	if (pt == PAWN && endTile == m_possibleEnPassant) {
+		captureTile = endTile + (m_blackToMove ? 8 : -8);
+	}
+	//Handle captures
+	if (m_pieceOnTile[captureTile] != nullptr) {
+		ans ^= hashNums[captureTile][!m_blackToMove][m_pieceOnTile[captureTile]->type];
+	}
+	//Handle castling
+	if (pt == KING && abs(endTile - stTile) == 2) {
+		const int8_t rookEndPos = endTile + (stTile > endTile ? 1 : -1);
+		const int8_t rookPos = stTile + (stTile > endTile ? -4 : 3);
+		ans ^= hashNums[rookPos][m_blackToMove][ROOK];
+		ans ^= hashNums[rookEndPos][m_blackToMove][ROOK];
+	}
+	//Handle castling hash
+	ans ^= hashNumsCastling[m_bitmaskCastling];
+	int8_t newCastleRights = m_bitmaskCastling;
+	if (pt == KING) {
+		if (m_blackToMove) {
+			newCastleRights &= ~0b0011;
+		} else {
+			newCastleRights &= ~0b1100;
+		}
+	}
+	if (pt == ROOK) {
+		if (stTile == 0) { newCastleRights &= ~4; }//~0100
+		if (stTile == 7) { newCastleRights &= ~8; }//~1000
+		if (stTile == 56) { newCastleRights &= ~1; }//~0001
+		if (stTile == 63) { newCastleRights &= ~2; }//~0010
+	}
+	if (endTile == 0) { newCastleRights &= ~4; }//~0100
+	if (endTile == 7) { newCastleRights &= ~8; }//~1000
+	if (endTile == 56) { newCastleRights &= ~1; }//~0001
+	if (endTile == 63) { newCastleRights &= ~2; }//~0010
+	ans ^= hashNumsCastling[newCastleRights];
+	//Handle ep hash
+	if (m_possibleEnPassant != -1) {
+		ans ^= hashNumsEp[getX(m_possibleEnPassant)];
+	}
+	if (pt == PAWN && abs(stTile - endTile) == 16) {
+		ans ^= hashNumsEp[getX(stTile)];
+	}
+	return ans;
+}
+
 int8_t Position::makeMove(int16_t move) {
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
 	//Update bitboards, bonuses ans zobrist hash
@@ -295,7 +349,7 @@ int8_t Position::makeMove(int16_t move) {
 	//Update En Passant target
 	int8_t begginingEpTile = m_possibleEnPassant;
 	if (m_pieceOnTile[stTile]->type == PieceType::PAWN && abs(getY(stTile) - getY(endTile)) != 1) {
-		m_possibleEnPassant = (stTile + endTile) >> 1;
+		m_possibleEnPassant = (stTile + endTile) / 2;
 	} else {
 		m_possibleEnPassant = -1;
 	}
@@ -320,10 +374,10 @@ int8_t Position::makeMove(int16_t move) {
 void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_) {
 	//Update zobrist hash for castling and ep
 	if (m_possibleEnPassant != -1) {
-		zHash ^= hashNumsEp[m_possibleEnPassant & 0b111];
+		zHash ^= hashNumsEp[getX(m_possibleEnPassant)];
 	}
 	if (possibleEnPassant_ != -1) {
-		zHash ^= hashNumsEp[possibleEnPassant_ & 0b111];
+		zHash ^= hashNumsEp[getX(possibleEnPassant_)];
 	}
 	zHash ^= hashNumsCastling[m_bitmaskCastling];
 	zHash ^= hashNumsCastling[bitmaskCastling_];

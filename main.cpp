@@ -28,6 +28,10 @@ TODO:
     -change
     .make more evaluations to ordering
 
+    .<IMPORTAINT>
+    tweak formula for history heuristic in AI.h; l 131, 245
+
+
     -add
     .add bonuses for sq
     .add draws by insufficient material and repetition of moves

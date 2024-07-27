@@ -2,6 +2,7 @@
 #include "Position.h"
 #include "TranspositionTable.h"
 #include <iostream>
+#include <xmmintrin.h>//_mm_prefetch
 #include <algorithm>//for max and min
 using std::max;
 using std::min;
@@ -19,7 +20,7 @@ public:
 
 	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
 	int* evalGuess;//Used for ordering moves
-	int historyHeuristic[2][64][64];
+	int historyHeuristic[2][6][64];
 
 	int16_t bestMove;
 
@@ -28,7 +29,7 @@ public:
 };
 
 inline int16_t AI::iterativeDeepening(int8_t depth) {
-	for (int8_t i = 0; i < 64; i++) {
+	for (int8_t i = 0; i < 6; i++) {
 		for (int8_t j = 0; j < 64; j++) {
 			historyHeuristic[0][i][j] = 0;
 			historyHeuristic[1][i][j] = 0;
@@ -40,7 +41,6 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	}
 	return eval;
 }
-
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth == 0) {
@@ -69,7 +69,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		//Higher bound
 		if (ttEntryRes->boundType() == BoundType::HighBound) {
-
+			//We have guaranteed better position
+			if (ttEntryRes->eval <= alpha) {
+				return alpha;
+			}
 		}
 		//If exact bound => renew gen and return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
@@ -77,6 +80,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				bestMove = ttEntryRes->bestMove;
 			}
 			return ttEntryRes->eval;
+		}
+		if (ttEntryRes->bestMove != nullMove) {
+			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(ttEntryRes->bestMove) >> tt.shRVal], _MM_HINT_T1);
 		}
 	}
 
@@ -99,6 +105,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	for (int16_t i = 0; i < movesCnt; i++) {
 		const int16_t curMove = moves[moveIndices[i]];
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
+		_mm_prefetch((const char*)&tt.chunk[pos->zHash >> tt.shRVal], _MM_HINT_T0);
 		pos->m_legalMovesStartIdx += movesCnt;
 		int16_t res = -search<0>(depth - 1, -beta, -alpha);
 		pos->m_legalMovesStartIdx -= movesCnt;
@@ -121,7 +128,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
 			}
-			historyHeuristic[pos->m_blackToMove][getStartPos(curMove)][getEndPos(curMove)] += depth * depth * depth;
+			const PieceType pt = pos->m_pieceOnTile[getStartPos(curMove)]->type;
+			historyHeuristic[pos->m_blackToMove][pt][getEndPos(curMove)] += depth * floorLog2(i);
 			return beta;
 		}
 		//Best move
@@ -223,9 +231,9 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 	for (int16_t i = startIdx; i < endIdx; i++) {
 		//Note: here we only guess how good a move is, so we can afford to make
 		//guesses overinflated since the only thing that matters is their relative values
-		int16_t curMove = pos->m_legalMoves[i];
-		int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
-		PieceType pt = pos->m_pieceOnTile[stPos]->type;
+		const int16_t curMove = pos->m_legalMoves[i];
+		const int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
+		const PieceType pt = pos->m_pieceOnTile[stPos]->type;
 		int curGuess = 0;
 		//Add bonuses; Have to have if(black) here, because template doesn't accept it as argument
 		if (pos->m_blackToMove) {
@@ -234,8 +242,11 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 			curGuess += 4 * (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos));
 		}
 		//Add history heuristic
-		int flog2 = floorLog2(historyHeuristic[pos->m_blackToMove][stPos][endPos]);
-		curGuess += flog2 * flog2 / 16;
+		const int hh = historyHeuristic[pos->m_blackToMove][pt][endPos];
+		//if (hh != 0) {
+		//	std::cout << hh << ' ';
+		//}
+		curGuess += floorLog2(hh);
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {

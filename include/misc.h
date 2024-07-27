@@ -2,10 +2,10 @@
 #include <cinttypes>
 
 inline int8_t getX(const int8_t pos) {
-	return (pos & 7);//7 = 111
+	return (pos & 0b111);
 };
 inline int8_t getY(const int8_t pos) {
-	return (pos & 56) >> 3;//56 = 111000
+	return (pos & 0b111000) >> 3;
 };
 inline int8_t getDiagM(const int8_t pos) {
 	return getX(pos) - getY(pos) + 7;

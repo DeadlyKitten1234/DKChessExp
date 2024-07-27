@@ -14,6 +14,7 @@ public:
 	template<bool black>
 	//stTile == -1 means revert capture; endTile == -1 means make capture
 	inline void updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile);
+	uint64_t getZHashIfMoveMade(const int16_t move) const;
 	int8_t makeMove(int16_t move);//Returns captured piece idx
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
 	template<bool capturesOnly>
