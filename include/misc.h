@@ -21,14 +21,48 @@ inline int8_t getLSBPos(const uint64_t bitmask) {
 }
 
 inline int8_t floorLog2(int num) {
-	while (num) {
-		int8_t ans = getLSBPos(num);
-		num &= num - 1;
-		if (num == 0) {
-			return ans;
-		}
+	if (num < 0) {
+		return 0;
 	}
-	return 0;
+	int8_t ans = 0;
+	if (num >> 16) {
+		num >>= 16;
+		ans |= 16;
+	}
+	if (num >> 8) {
+		num >>= 8;
+		ans |= 8;
+	}
+	if (num >> 4) {
+		num >>= 4;
+		ans |= 4;
+	}
+	if (num >> 2) {
+		num >>= 2;
+		ans |= 2;
+	}
+	if (num >> 1) {
+		num >>= 1;
+		ans++;
+	}
+	return ans;
+}
+
+inline int16_t fastSqrt(int num) {
+	//Source: https://en.wikipedia.org/wiki/Fast_inverse_square_root
+	//Perform some magic with the bits ang get the result we want
+	long i;
+	float x2, y;
+	const float threehalfs = 1.5F;
+	x2 = num * 0.5F;
+	y = num;
+	i = *(long*)&y;
+	i = 0x5f3759df - (i >> 1);
+	y = *(float*)&i;
+	//Still gives fairly accurate results without the line below
+	//(it is at most one off for the numbers up to 1000)
+	y = y * (threehalfs - (x2 * y * y));
+	return 1/y;
 }
 
 inline int8_t countOnes(uint64_t bitmask) {
