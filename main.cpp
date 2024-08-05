@@ -30,6 +30,7 @@ TODO:
 
     .<IMPORTAINT>
     tweak formula for history heuristic in AI.h; l 131, 245
+    pretty sure found good one, but need to get fast sqrt algorithm
 
 
     -add
@@ -68,13 +69,13 @@ int main(int argc, char* argv[]) {
     Position::initLegalMoves();
     tt.setSize(64);
     initTests();
-
     
     Position* pos = new Position();
     //char fen[] = "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
     //char fen[] = "8/3r4/3k4/8/8/3K4/8/8 b - - 0 1";
     //char fen[] = "8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1";
     //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
     char fen[] = "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 0 1";
     //reverseFenPosition(fen);
     pos->readFEN(fen);

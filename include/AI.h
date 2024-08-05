@@ -3,7 +3,7 @@
 #include "TranspositionTable.h"
 #include <iostream>
 #include <xmmintrin.h>//_mm_prefetch
-#include <algorithm>//for max and min
+#include <algorithm>//max and min
 using std::max;
 using std::min;
 class AI {
@@ -29,6 +29,7 @@ public:
 	//This means when we didn't 'expect' a move to be good, but it turned out to be, 
 	//we 'change our expectations' and give it priority when ordering moves;
 	int historyHeuristic[2][6][64];
+	static const int MAX_HISTORY = 25 * 25;
 
 	int16_t bestMove;
 
@@ -59,7 +60,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	if (foundTTEntry && ttEntryRes->depth >= depth) {
-		//Renew gen (aka make it more valuable when deciding which entry to overwrite)
+		//Renew gen (make it more valuable when deciding which entry to overwrite)
 		ttEntryRes->setGen(tt.gen);
 		//Lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
@@ -77,7 +78,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		//Higher bound
 		if (ttEntryRes->boundType() == BoundType::HighBound) {
-			//We have guaranteed better position
+			//We have guaranteed a better position
 			if (ttEntryRes->eval <= alpha) {
 				return alpha;
 			}
@@ -139,11 +140,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
 			}
-			const PieceType pt = pos->m_pieceOnTile[getStartPos(curMove)]->type;
+			int* const hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[getStartPos(curMove)]->type][getEndPos(curMove)];
 			//floorLog2 returns 0 if negative value; When result is one of the first
 			//three (most likely an obvious capture), floorLog2 will return 0; This helps
 			//not weigh one off opportunities(opponent blunders) more in the rest of the search
-			historyHeuristic[pos->m_blackToMove][pt][getEndPos(curMove)] += depth * floorLog2(i - 1);
+			*hh += depth * floorLog2(i - 1) * floorLog2(MAX_HISTORY - *hh);
 			return beta;
 		}
 		//Best move
@@ -255,7 +256,7 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		} else {
 			curGuess += 4 * (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos));
 		}
-		//Add history heuristic; I found sqrt * 4 works quite well
+		//Add history heuristic; I found sqrt works quite well
 		const int hh = historyHeuristic[pos->m_blackToMove][pt][endPos];
 		//if (hh != 0) {
 		//	std::cout << hh << ' ' << (int)fastSqrt(hh) << '\n';
@@ -267,7 +268,14 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 			//13 * capturedPieceVal to prioritise captures before non-captures and 
 			//to incentivise capturing more valuable pieces; We chosse 13, because
 			//13 is the lowest number above how much pawns a queen is worth
-			curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
+			
+			//pieceValue[KING] = inf; so king captures would be placed last; to prevent this add if (pt == KING)
+			if (pt == KING) {
+				//Capturing with king is generally not preferable, so mult only by 11
+				curGuess += 11 * pieceValue[pos->m_pieceOnTile[endPos]->type];
+			} else {
+				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
+			}
 		}
 		//If tile attacked by opponent pawn
 		if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
@@ -300,7 +308,7 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 	}
 	//Use indices to "link" evalGuess and pos->m_legalMove together because use std::sort
 	std::sort(indices, indices + (endIdx - startIdx),
-		[this](int16_t idx1, int16_t idx2) {
+		[this](const int16_t idx1, const int16_t idx2) {
 			return evalGuess[idx1] > evalGuess[idx2];
 		}
 	);
