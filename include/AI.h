@@ -19,7 +19,15 @@ public:
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 
 	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
-	int* evalGuess;//Used for ordering moves
+	//Used for ordering moves
+	int* evalGuess;
+
+	//PARAMETERS: side to move, piece type, end square
+	//The purpose of hh is to help order moves; When an AB cutoff occurs, 
+	//we increase hh, weighing moves that were previously ordered towards 
+	//the end more; This helps order them toward the front when encountering them again;
+	//This means when we didn't 'expect' a move to be good, but it turned out to be, 
+	//we 'change our expectations' and give it priority when ordering moves;
 	int historyHeuristic[2][6][64];
 
 	int16_t bestMove;
@@ -103,9 +111,12 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
+		//Prefetch next move (faster by ~7%)
+		if (depth <= 5 && i != movesCnt - 1) {
+			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+		}
 		const int16_t curMove = moves[moveIndices[i]];
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
-		_mm_prefetch((const char*)&tt.chunk[pos->zHash >> tt.shRVal], _MM_HINT_T0);
 		pos->m_legalMovesStartIdx += movesCnt;
 		int16_t res = -search<0>(depth - 1, -beta, -alpha);
 		pos->m_legalMovesStartIdx -= movesCnt;
@@ -129,7 +140,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				bestMove = curMove;
 			}
 			const PieceType pt = pos->m_pieceOnTile[getStartPos(curMove)]->type;
-			historyHeuristic[pos->m_blackToMove][pt][getEndPos(curMove)] += depth * floorLog2(i);
+			//floorLog2 returns 0 if negative value; When result is one of the first
+			//three (most likely an obvious capture), floorLog2 will return 0; This helps
+			//not weigh one off opportunities(opponent blunders) more in the rest of the search
+			historyHeuristic[pos->m_blackToMove][pt][getEndPos(curMove)] += depth * floorLog2(i - 1);
 			return beta;
 		}
 		//Best move
@@ -241,12 +255,12 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		} else {
 			curGuess += 4 * (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos));
 		}
-		//Add history heuristic
+		//Add history heuristic; I found sqrt * 4 works quite well
 		const int hh = historyHeuristic[pos->m_blackToMove][pt][endPos];
 		//if (hh != 0) {
-		//	std::cout << hh << ' ';
+		//	std::cout << hh << ' ' << (int)fastSqrt(hh) << '\n';
 		//}
-		curGuess += floorLog2(hh);
+		curGuess += fastSqrt(hh) * 4;
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
