@@ -48,6 +48,12 @@ inline int8_t floorLog2(int num) {
 	return ans;
 }
 
+enum SqrtSetting : bool {
+	FAST = 0,
+	ACCURATE = 1
+};
+
+template<SqrtSetting accurateSetting = FAST>
 inline int16_t fastSqrt(int num) {
 	//Source: https://en.wikipedia.org/wiki/Fast_inverse_square_root
 	//Perform some magic with the bits ang get the result we want
@@ -61,7 +67,9 @@ inline int16_t fastSqrt(int num) {
 	y = *(float*)&i;
 	//Still gives fairly accurate results without the line below
 	//(it is at most one off for the numbers up to 1000)
-	y = y * (threehalfs - (x2 * y * y));
+	if (accurateSetting == ACCURATE) {
+		y = y * (threehalfs - (x2 * y * y));
+	}
 	return 1/y;
 }
 
