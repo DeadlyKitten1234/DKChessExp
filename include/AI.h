@@ -1,9 +1,10 @@
 #pragma once
 #include "Position.h"
+#include "misc.h"
 #include "TranspositionTable.h"
 #include <iostream>
 #include <xmmintrin.h>//_mm_prefetch
-#include <algorithm>//max and min
+#include <algorithm>
 using std::max;
 using std::min;
 class AI {
@@ -22,17 +23,16 @@ public:
 	//Used for ordering moves
 	int* evalGuess;
 
-	//PARAMETERS: side to move, piece type, end square
-	//The purpose of hh is to help order moves; When an AB cutoff occurs, 
-	//we increase hh, weighing moves that were previously ordered towards 
-	//the end more; This helps order them toward the front when encountering them again;
-	//This means when we didn't 'expect' a move to be good, but it turned out to be, 
-	//we 'change our expectations' and give it priority when ordering moves;
+	//<https://www.chessprogramming.org/History_Heuristic>
 	int historyHeuristic[2][6][64];
-	static const int MAX_HISTORY = 25 * 25;
+	static const int MAX_HISTORY;
 
+	//<https://www.chessprogramming.org/Countermove_Heuristic>
+	int16_t counterMove[2][6][64];
+	static const int COUNTER_MOVE_BONUS;
+
+	Stack<int16_t> movesHistory;
 	int16_t bestMove;
-
 	//Warning: pos is referece => changes made by the AI will impact the original position
 	Position* pos;
 };
@@ -42,8 +42,12 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 		for (int8_t j = 0; j < 64; j++) {
 			historyHeuristic[0][i][j] = 0;
 			historyHeuristic[1][i][j] = 0;
+			//counterMove[0][i][j] = nullMove;
+			//counterMove[1][i][j] = nullMove;
 		}
 	}
+	movesHistory.clear();
+
 	int16_t eval = 0;
 	for (int8_t i = 2; i < depth; i++) {
 		eval = search(depth, -pieceValue[KING] - 1, pieceValue[KING] + 1);
@@ -83,15 +87,12 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				return alpha;
 			}
 		}
-		//If exact bound => renew gen and return eval
+		//If exact bound => return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
 			if constexpr (root) {
 				bestMove = ttEntryRes->bestMove;
 			}
 			return ttEntryRes->eval;
-		}
-		if (ttEntryRes->bestMove != nullMove) {
-			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(ttEntryRes->bestMove) >> tt.shRVal], _MM_HINT_T1);
 		}
 	}
 
@@ -117,17 +118,16 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
+		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
+		movesHistory.push(curMove);
+		//Search
 		int16_t res = -search<0>(depth - 1, -beta, -alpha);
+		//Undo move
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
-		//Temporary
-		//if (root) {
-		//	std::cout << "Evaluating ";
-		//	printName(curMove);
-		//	std::cout << ": " << res << "; Alpha: " << alpha << "; Beta: " << beta << '\n';
-		//}
+		movesHistory.pop();
 
 		//If mate ? decrease value with depth
 		if (res > pieceValue[KING] - 100) {
@@ -140,11 +140,19 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
 			}
-			int* const hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[getStartPos(curMove)]->type][getEndPos(curMove)];
-			//floorLog2 returns 0 if negative value; When result is one of the first
-			//three (most likely an obvious capture), floorLog2 will return 0; This helps
-			//not weigh one off opportunities(opponent blunders) more in the rest of the search
-			*hh += depth * floorLog2(i - 1) * floorLog2(MAX_HISTORY - *hh);
+			const bool isCapture = pos->m_pieceOnTile[getEndPos(curMove)] != nullptr;
+			if (!isCapture) {
+				//Update history heuristic
+				int* const hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[getStartPos(curMove)]->type][getEndPos(curMove)];
+				int clampedBonus = std::clamp(depth * depth, -MAX_HISTORY, MAX_HISTORY);
+				*hh += clampedBonus - *hh * clampedBonus / MAX_HISTORY;
+				//Update counter moves heuristic
+				if (!movesHistory.empty()) {
+					const int8_t lastMoveEnd = getEndPos(movesHistory.top());
+					int16_t* const cMove = &counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd];
+					*cMove = curMove;
+				}
+			}
 			return beta;
 		}
 		//Best move
@@ -161,13 +169,17 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		pos->m_legalMovesCnt = movesCnt;
 	}
 	//No alpha-beta cutoff occured
+	//Don't overwrite best move with null move
+	if (foundTTEntry && curBestMove == nullMove) {
+		curBestMove = ttEntryRes->bestMove;
+	}
 	ttEntryRes->init(pos->zHash, curBestMove, alpha, depth, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
 	return alpha;
 }
 
 inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Don't force player to capture if it is worse for him
-	//(example: don't force Qxa1 if then there is bxa1)
+	//(example: don't force Qxa3 if then there is bxa3)
 	int16_t staticEval = pos->evaluate();
 	//When going to cut, don't tt.find, because its expensive
 	if (staticEval >= beta) {
@@ -183,7 +195,14 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
 			staticEval = ttEntryRes->eval;
 		}
-		//If exact bound => renew gen and return eval
+		//Higher bound
+		if (ttEntryRes->boundType() == BoundType::HighBound) {
+			//We have guaranteed a better position
+			if (ttEntryRes->eval <= alpha) {
+				return alpha;
+			}
+		}
+		//If exact bound => return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
 			return ttEntryRes->eval;
 		}
@@ -208,14 +227,27 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
+		//Prefetch next move
+		if (i != movesCnt - 1) {
+			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+		}
 		const int16_t curMove = moves[moveIndices[i]];
+		//Make move
 		int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
+		movesHistory.push(curMove);
+		//Search
 		int16_t res = -searchOnlyCaptures(-beta, -alpha);
+		//Undo move
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+		movesHistory.pop();
+
 		if (res >= beta) {
-			ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
+			//Don't replace ttEntry with garbage one useful only for qsearch
+			if (!foundTTEntry) {
+				ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
+			}
 			return beta;
 		}
 		if (res > alpha) {
@@ -224,7 +256,12 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			curBestMove = curMove;
 		}
 	}
-	ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::LowBound));
+	//Don't replace ttEntry with garbage one useful only for qsearch
+	if (!foundTTEntry) {
+		//Here can write high bound if failLow, because it only affect qsearch, because in main
+		//search we check if ttEntry->depth >= depth, and here we write with depth = 0
+		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::LowBound));
+	}
 	return alpha;
 }
 
@@ -250,18 +287,28 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		const int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
 		const PieceType pt = pos->m_pieceOnTile[stPos]->type;
 		int curGuess = 0;
+		indices[i - startIdx] = i - startIdx;
+		//Favor move in tt
+		if (curMove == ttBestMove) {
+			evalGuess[i - startIdx] = 0x7FFF;//<- just a sufficiently large number
+			continue;
+		}
+
 		//Add bonuses; Have to have if(black) here, because template doesn't accept it as argument
 		if (pos->m_blackToMove) {
 			curGuess += 4 * (getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos));
 		} else {
 			curGuess += 4 * (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos));
 		}
-		//Add history heuristic; I found sqrt works quite well
-		const int hh = historyHeuristic[pos->m_blackToMove][pt][endPos];
-		//if (hh != 0) {
-		//	std::cout << hh << ' ' << (int)fastSqrt(hh) << '\n';
-		//}
-		curGuess += fastSqrt(hh) * 4;
+		//Add history heuristic
+		curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
+		//Add counter move heuristic
+		if (!movesHistory.empty()) {
+			const int8_t lastMoveEnd = getEndPos(movesHistory.top());
+			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd]) {
+				curGuess += COUNTER_MOVE_BONUS;
+			}
+		}
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
@@ -293,18 +340,11 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		if (checksToKing[pt] & (1ULL << endPos)) {
 			//Add pieceValue[piece to make move] / 16, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
-			curGuess += 75 + (pieceValue[pt] >> 4);
-		}
-
-		//Favor move in tt
-		if (curMove == ttBestMove) {
-			curGuess = 0x7FFF;//<- just a sufficiently large number
+			curGuess += 75 + (pieceValue[pt] / 16);
 		}
 
 		//Write in guess array that will later be used to sort the moves
 		evalGuess[i - startIdx] = curGuess;
-		//In sortHelper store indices of moves
-		indices[i - startIdx] = i - startIdx;
 	}
 	//Use indices to "link" evalGuess and pos->m_legalMove together because use std::sort
 	std::sort(indices, indices + (endIdx - startIdx),
