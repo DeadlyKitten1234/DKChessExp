@@ -30,7 +30,7 @@ public:
 		depth = depth_;
 		genAndType = (gen_ << 3) + type_;
 	}
-	inline uint16_t calcValue() {
+	inline uint16_t calcValue() const {
 		//This function is used to decide what the worth of an entry is
 		//in order to pick the least valuable one and replace it with a new one
 
