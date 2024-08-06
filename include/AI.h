@@ -18,6 +18,8 @@ public:
 	template<bool root = 1>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
+	void resetHistory();
+	void updateHistoryNewSearch();
 
 	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
 	//Used for ordering moves
@@ -38,19 +40,11 @@ public:
 };
 
 inline int16_t AI::iterativeDeepening(int8_t depth) {
-	for (int8_t i = 0; i < 6; i++) {
-		for (int8_t j = 0; j < 64; j++) {
-			historyHeuristic[0][i][j] = 0;
-			historyHeuristic[1][i][j] = 0;
-			//counterMove[0][i][j] = nullMove;
-			//counterMove[1][i][j] = nullMove;
-		}
-	}
-	movesHistory.clear();
-
 	int16_t eval = 0;
-	for (int8_t i = 2; i < depth; i++) {
-		eval = search(depth, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
+		//Don't oversaturate history heuristic moves that are near the root
+		updateHistoryNewSearch();
+		eval = search(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
 	}
 	return eval;
 }
@@ -95,6 +89,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			return ttEntryRes->eval;
 		}
 	}
+	int16_t staticEval = pos->evaluate();
+	if (depth == 1 && staticEval + pieceValue[QUEEN] + 2 * pieceValue[PAWN] <= alpha) {
+		return alpha;
+	}
 
 	pos->updateLegalMoves<0>();
 	const int16_t movesCnt = pos->m_legalMovesCnt;
@@ -106,24 +104,51 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		return 0;
 	}
 	int16_t moveIndices[256];
-
 	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
 
-	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is achieved
+	//Fail low means no move gives a score > alpha
+	//Starts with 1 and is set to 0 if a score > alpha is achieved
+	bool failLow = 1;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
-		//Prefetch next move (faster by ~7%)
-		if (depth <= 5 && i != movesCnt - 1) {
+		//Prefetch next move in tt
+		if (i != movesCnt - 1) {
 			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
+		//Futility pruning
+		if (depth == 1) {
+			int16_t maxIncrese = 0;
+			if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
+				maxIncrese += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
+			}
+			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
+				maxIncrese += pieceValue[getPromotionPiece(curMove)];
+			}
+			if (staticEval + maxIncrese + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
+				break;
+			}
+		}
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
 		movesHistory.push(curMove);
+
 		//Search
-		int16_t res = -search<0>(depth - 1, -beta, -alpha);
+		int16_t res = 0;
+		if (i == 0 || depth <= 2) {
+			res = -search<0>(depth - 1, -beta, -alpha);
+		} else {
+			//Perftorm zero window search
+			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
+			//https://www.chessprogramming.org/Null_Window
+			res = -search<0>(depth - 1, -alpha - 1, -alpha);
+			if (res > alpha && beta - alpha > 1) {
+				res = -search<0>(depth - 1, -beta, -alpha);
+			}
+		}
+
 		//Undo move
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
@@ -153,7 +178,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					*cMove = curMove;
 				}
 			}
-			return beta;
+			return res;
 		}
 		//Best move
 		if (res > alpha) {
@@ -183,7 +208,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	int16_t staticEval = pos->evaluate();
 	//When going to cut, don't tt.find, because its expensive
 	if (staticEval >= beta) {
-		return beta;
+		return staticEval;
 	}
 	//Check tt
 	bool foundTTEntry = 0;
@@ -193,7 +218,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		ttEntryRes->setGen(tt.gen);
 		//If lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
-			staticEval = ttEntryRes->eval;
+			staticEval = max(staticEval, ttEntryRes->eval);
 		}
 		//Higher bound
 		if (ttEntryRes->boundType() == BoundType::HighBound) {
@@ -207,13 +232,20 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			return ttEntryRes->eval;
 		}
 	}
-	bool failLow = 1;//Fail low means no move gives a score > alpha; Starts with 1 and is set to 0 if a score > alpha is achieved
+
+	//Fail low means no move gives a score > alpha
+	//Starts with 1 and is set to 0 if a score > alpha is achieved
+	bool failLow = 1;
 	if (staticEval >= beta) {
-		return beta;
+		return staticEval;
 	}
 	if (staticEval > alpha) {
 		alpha = staticEval;
 		failLow = 0;
+	}
+	//If even capturing a queen can't improve position
+	if (staticEval + pieceValue[QUEEN] + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
+		return alpha;
 	}
 
 	pos->updateLegalMoves<1>();
@@ -232,12 +264,38 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
+		//If can't improve alpha, don't search move; This is (i think) delta pruning
+		//https://www.chessprogramming.org/Delta_Pruning
+		int16_t maxIncrease = 0;
+		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
+			//Capture
+			maxIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
+		}
+		if (getPromotionPiece(curMove) != PieceType::UNDEF) {
+			//Promotion
+			maxIncrease += pieceValue[getPromotionPiece(curMove)];
+		}
+		if (staticEval + maxIncrease + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
+			continue;
+		}
+
 		//Make move
 		int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
 		movesHistory.push(curMove);
 		//Search
-		int16_t res = -searchOnlyCaptures(-beta, -alpha);
+		int16_t res = 0;
+		if (i == 0) {
+			res = -searchOnlyCaptures(-beta, -alpha);
+		} else {
+			//Perftorm zero window search
+			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
+			//https://www.chessprogramming.org/Null_Window
+			res = -searchOnlyCaptures(-alpha - 1, -alpha);
+			if (res > alpha && beta - alpha > 1) {
+				res = -searchOnlyCaptures(-beta, -alpha);
+			}
+		}
 		//Undo move
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
@@ -248,7 +306,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			if (!foundTTEntry) {
 				ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
 			}
-			return beta;
+			return res;
 		}
 		if (res > alpha) {
 			alpha = res;
@@ -258,9 +316,10 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	}
 	//Don't replace ttEntry with garbage one useful only for qsearch
 	if (!foundTTEntry) {
-		//Here can write high bound if failLow, because it only affect qsearch, because in main
-		//search we check if ttEntry->depth >= depth, and here we write with depth = 0
-		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::LowBound));
+		//Here can write high bound if failLow and exact otherwise, because 
+		//it only affect qsearch, because in main search we check if
+		//ttEntry->depth >= depth, and here we write with depth = 0
+		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
 	}
 	return alpha;
 }
