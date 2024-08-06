@@ -48,27 +48,28 @@ inline int8_t floorLog2(int num) {
 	return ans;
 }
 
-enum SqrtSetting : bool {
-	FAST = 0,
-	ACCURATE = 1
-};
-
-template<SqrtSetting accurateSetting = FAST>
-inline int16_t fastSqrt(int num) {
+inline int16_t fastSqrt(int x) {
 	//Source: https://en.wikipedia.org/wiki/Fast_inverse_square_root
-	//Perform some magic with the bits ang get the result we want
+	//Perform some magic with the bits and get the result we want
+	bool neg = 0;
+	if (x < 0) {
+		x = -x;
+		neg = 1;
+	}
+
 	long i;
 	float x2, y;
-	const float threehalfs = 1.5F;
-	x2 = num * 0.5F;
-	y = num;
+	x2 = x * 0.5F;
+	y = x;
 	i = *(long*)&y;
 	i = 0x5f3759df - (i >> 1);
 	y = *(float*)&i;
 	//Still gives fairly accurate results without the line below
 	//(it is at most one off for the numbers up to 1000)
-	if (accurateSetting == ACCURATE) {
-		y = y * (threehalfs - (x2 * y * y));
+	const float threehalfs = 1.5F;
+	y = y * (threehalfs - (x2 * y * y));
+	if (neg) {
+		y = -y;
 	}
 	return 1/y;
 }
@@ -97,3 +98,41 @@ public:
 private:
 	uint64_t seed;
 };
+
+template<typename T>
+class Stack {
+public:
+	Stack();
+	~Stack();
+	void init(int maxSz);
+
+	inline T top() const { return entry[endIdx - 1]; }
+	inline bool empty() const { return endIdx == 0; }
+	inline void pop() { endIdx--; }
+	inline void push(const T& newEntry_) { entry[endIdx++] = newEntry_; };
+	inline void clear() { endIdx = 0; };
+private:
+	int endIdx;
+	T* entry;
+};
+
+template<typename T>
+inline Stack<T>::Stack() {
+	entry = nullptr;
+	endIdx = 0;
+}
+template<typename T>
+inline Stack<T>::~Stack() {
+	if (entry != nullptr) {
+		delete[] entry;
+	}
+}
+
+template<typename T>
+inline void Stack<T>::init(int maxSz) {
+	if (entry != nullptr) {
+		delete[] entry;
+	}
+	entry = new T(maxSz);
+	endIdx = 0;
+}
