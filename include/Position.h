@@ -17,6 +17,8 @@ public:
 	uint64_t getZHashIfMoveMade(const int16_t move) const;
 	int8_t makeMove(int16_t move);//Returns captured piece idx
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
+	void makeNullMove();
+
 	template<bool capturesOnly>
 	void updateLegalMoves();
 	inline int16_t evaluate();

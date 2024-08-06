@@ -455,6 +455,11 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 	}
 }
 
+void Position::makeNullMove() {
+	m_blackToMove = !m_blackToMove;
+	zHash ^= hashNumBlackToMove;
+}
+
 void Position::initLegalMoves() {
 	m_legalMoves = new int16_t[8192]();
 	for (int i = 0; i < 8192; i++) {
