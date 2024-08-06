@@ -133,6 +133,6 @@ inline void Stack<T>::init(int maxSz) {
 	if (entry != nullptr) {
 		delete[] entry;
 	}
-	entry = new T(maxSz);
+	entry = new T[maxSz]();
 	endIdx = 0;
 }
