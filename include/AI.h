@@ -136,8 +136,13 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (!pos->friendlyInCheck && depth < 8 &&
 		abs((abs(alpha) - pieceValue[KING])) < MAX_PLY_MATE &&
 		abs((abs(beta) - pieceValue[KING])) < MAX_PLY_MATE) {
-		if (staticEval - 128 * depth >= beta) {
+		//I think these are okay?
+		if (staticEval - pieceValue[BISHOP] / 2 * depth - 2*pieceValue[PAWN]/*safety margin*/ >= beta) {
 			return beta;
+		}
+		if (staticEval + pieceValue[BISHOP] / 2 * depth + 2*pieceValue[PAWN]/*safety margin*/ <= alpha) {
+			//Returning beta should also be fine
+			return staticEval;
 		}
 	}
 
@@ -150,6 +155,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
+
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
@@ -416,7 +422,7 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 			//pieceValue[KING] = inf; so king captures would be placed last; to prevent this add if (pt == KING)
 			if (pt == KING) {
 				//Capturing with king is generally not preferable, so mult only by 11
-				curGuess += 11 * pieceValue[pos->m_pieceOnTile[endPos]->type];
+				curGuess += 11 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[QUEEN] * 3 / 2;
 			} else {
 				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
 			}
