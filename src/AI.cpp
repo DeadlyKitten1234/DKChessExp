@@ -41,8 +41,8 @@ void AI::updateHistoryNewSearch() {
 	for (int8_t i = 0; i < 6; i++) {
 		for (int8_t j = 0; j < 64; j++) {
 			//Don't fully reset hh, but reduce it
-			historyHeuristic[0][i][j] /= 3;
-			historyHeuristic[1][i][j] /= 3;
+			historyHeuristic[0][i][j] /= 2;
+			historyHeuristic[1][i][j] /= 2;
 			//Dont reset counter moves, because good chance that they will remain good
 		}
 	}

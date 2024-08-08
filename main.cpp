@@ -25,15 +25,14 @@ TODO:
       When evaluating position B, will find a way to go back to position A and will get
       a better evaluation or if it is equal, will dismiss any other moves
 
-    -change
-    .make more evaluations to ordering
-
     -add
+    .timer
     .add draws by insufficient material and repetition of moves
-    .add some tests? (take them from chess.com puzzles) in TestMaganer
+    .make more evaluations to ordering
 
     -maybe
     .change transition from midgame bonuses to endgame bonuses to sigmoid or tanh
+    .add some tests? (take them from chess.com puzzles) in TestMaganer
 
     -read
     .<https://www.chessprogramming.org/CPW-Engine_search>
@@ -42,7 +41,6 @@ TODO:
     .all links in <https://www.chessprogramming.org/Evaluation>
 
     .<https://www.chessprogramming.org/Principal_Variation_Search>
-    .<https://www.chessprogramming.org/Delta_Pruning>
     .<https://www.chessprogramming.org/Futility_Pruning>
     .<https://www.chessprogramming.org/Scout>
     .<https://www.chessprogramming.org/ProbCut>
@@ -63,12 +61,11 @@ int main(int argc, char* argv[]) {
     Position::initLegalMoves();
     tt.setSize(64);
     initTests();
-    
     Position* pos = new Position();
     //char fen[] = "8/3KP3/8/8/8/8/8/6kq b - - 0 1";
     //char fen[] = "8/3r4/3k4/8/8/3K4/8/8 b - - 0 1";
     //char fen[] = "8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1";
-    //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+    //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     char fen[] = "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R b KQkq - 0 1";
     //reverseFenPosition(fen);
     pos->readFEN(fen);

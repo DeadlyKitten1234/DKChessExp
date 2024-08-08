@@ -152,7 +152,7 @@ void populateMovesLookup() {
 void populateGlobalDirectionBitmasks() {
 	for (int i = 0; i < 8; i++) {
 		for (int j = 0; j < 8; j++) {
-			colBitmask[i] |= (1ULL << (i + 8 * j));
+			colBitmask[i] |= (1ULL << (8 * j + i));
 			rowBitmask[i] |= (1ULL << (8 * i + j));
 		}
 	}

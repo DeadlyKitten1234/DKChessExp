@@ -107,6 +107,8 @@ public:
 	void init(int maxSz);
 
 	inline T top() const { return entry[endIdx - 1]; }
+	inline T kElFromTop(int k) const { return entry[endIdx - k - 1]; }
+	inline int size() const { return endIdx; }
 	inline bool empty() const { return endIdx == 0; }
 	inline void pop() { endIdx--; }
 	inline void push(const T& newEntry_) { entry[endIdx++] = newEntry_; };

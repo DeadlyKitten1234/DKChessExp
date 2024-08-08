@@ -16,30 +16,30 @@ extern uint64_t pawnAtt;
 
 inline uint64_t attackersToSq(const Position& pos, int8_t sq, int8_t ignoreStTile = -1) {
 	uint64_t allBB = (pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard) & ~(1ULL << sq);
-	if (ignoreStTile != 0) {
+	if (ignoreStTile != -1) {
 		allBB &= ~(1ULL << ignoreStTile);
 	}
 	const uint64_t* enemyBB = (pos.m_blackToMove ? pos.m_whiteBitboards : pos.m_blackBitboards);
 	return	(attacks<BISHOP>(sq, allBB) & (enemyBB[BISHOP] | enemyBB[QUEEN])) |
-		(attacks<ROOK>(sq, allBB) & (enemyBB[ROOK] | enemyBB[QUEEN]) |
+			(attacks<ROOK>(sq, allBB) & (enemyBB[ROOK] | enemyBB[QUEEN]) |
 			(knightMovesLookup[sq] & enemyBB[KNIGHT]) |
 			(kingMovesLookup[sq] & enemyBB[KING])) |
-		(shift((1ULL << sq) & ~colBitmask[0], (pos.m_blackToMove ? -8 : 8) - 1) & enemyBB[PAWN]) |
-		(shift((1ULL << sq) & ~colBitmask[7], (pos.m_blackToMove ? -8 : 8) + 1) & enemyBB[PAWN]);
+			(shift((1ULL << sq) & ~colBitmask[0], (pos.m_blackToMove ? -8 : 8) - 1) & enemyBB[PAWN]) |
+			(shift((1ULL << sq) & ~colBitmask[7], (pos.m_blackToMove ? -8 : 8) + 1) & enemyBB[PAWN]);
 }
 
 inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t ignoreStTile, int8_t addEndTile, int8_t ignoreEnPassantCaptureTile) {
 	uint64_t blockers = (pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard);
 	blockers ^= (1ULL << ignoreStTile) | (1ULL << ignoreEnPassantCaptureTile);
 	blockers |= 1ULL << addEndTile;
-	uint64_t enemyDiagPcs = (pos.m_blackToMove ? pos.m_whiteBitboards[BISHOP] | pos.m_whiteBitboards[QUEEN] :
-		pos.m_blackBitboards[BISHOP] | pos.m_blackBitboards[QUEEN]);
-	if (bishopMovesLookup[tile][getMagicIdx(blockers & bishopRelevantSq[tile], tile, 1)] & enemyDiagPcs) {
+	uint64_t enemyDiagPcs =	(pos.m_blackToMove ? pos.m_whiteBitboards[BISHOP] | pos.m_whiteBitboards[QUEEN] :
+							pos.m_blackBitboards[BISHOP] | pos.m_blackBitboards[QUEEN]);
+	if (attacks<BISHOP>(tile, blockers) & enemyDiagPcs) {
 		return 1;
 	}
-	uint64_t enemyStraightPcs = (pos.m_blackToMove ? pos.m_whiteBitboards[ROOK] | pos.m_whiteBitboards[QUEEN] :
-		pos.m_blackBitboards[ROOK] | pos.m_blackBitboards[QUEEN]);
-	if (rookMovesLookup[tile][getMagicIdx(blockers & rookRelevantSq[tile], tile, 0)] & enemyStraightPcs) {
+	uint64_t enemyStraightPcs =	(pos.m_blackToMove ? pos.m_whiteBitboards[ROOK] | pos.m_whiteBitboards[QUEEN] :
+								pos.m_blackBitboards[ROOK] | pos.m_blackBitboards[QUEEN]);
+	if (attacks<ROOK>(tile, blockers) & enemyStraightPcs) {
 		return 1;
 	}
 	return 0;
@@ -53,9 +53,9 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 	uint64_t allPiecesBitboard = pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard;
 	//Lookup moves and remove ones that have friendly pieces on them
 	uint64_t possibleMoves = kingMovesLookup[king->pos] & ~(pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
-	if constexpr (useAttackedTiles) {
+	//if constexpr (useAttackedTiles) {
 		possibleMoves &= ~tileAttacked;
-	}
+	//}
 	if constexpr (capturesOnly) {
 		possibleMoves &= (pos.m_blackToMove ? pos.m_whiteAllPiecesBitboard : pos.m_blackAllPiecesBitboard);
 	}
@@ -131,7 +131,6 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			if (!illegalCastling) {
 				//Directly add move, because not worth |= 1 << newPos to just add it later
 				out[ans++] = createMove(king->pos, king->pos - 2);
-
 			}
 		}
 	}
@@ -263,15 +262,15 @@ inline void getPinsAndChecks(const Position& pos) {
 	inDoubleCheck = 0;
 	tilePinnedBitmask = 0;
 	tileBlocksCheck = 0;
-	if constexpr (calcAttackedTiles) {
-		tileAttacked = 0;
-	}
+	tileAttacked = 0;
 	uint64_t* enemyBB = (pos.m_blackToMove ? pos.m_whiteBitboards : pos.m_blackBitboards);
 	uint64_t allPcsBB = pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard;
 	uint64_t kingBB = (pos.m_blackToMove ? pos.m_blackBitboards[KING] : pos.m_whiteBitboards[KING]);
 	int8_t kingPos = (pos.m_blackToMove ? pos.m_blackPiece[0]->pos : pos.m_whitePiece[0]->pos);
 	//Knights
 	if (knightMovesLookup[kingPos] & enemyBB[KNIGHT]) {
+		//King can't be double checked by knights so we are 
+		//justified in setting knight blocks check
 		tileBlocksCheck |= knightMovesLookup[kingPos] & enemyBB[KNIGHT];
 		inDoubleCheck = inCheck;
 		inCheck = 1;
@@ -281,16 +280,18 @@ inline void getPinsAndChecks(const Position& pos) {
 	const uint64_t pawnLeft = shift(enemyBB[PAWN] & ~colBitmask[0], (pos.m_blackToMove ? 8 : -8) - 1);
 	const uint64_t pawnRight = shift(enemyBB[PAWN] & ~colBitmask[7], (pos.m_blackToMove ? 8 : -8) + 1);
 	pawnAtt = pawnLeft | pawnRight;
-	if constexpr (calcAttackedTiles) {
+	//if constexpr (calcAttackedTiles) {
 		tileAttacked |= pawnLeft | pawnRight;
-	}
+	//}
 	if (pawnLeft & kingBB || pawnRight & kingBB) {
 		inDoubleCheck = inCheck;
 		inCheck = 1;
 		tileBlocksCheck |= shift((kingBB & ~(colBitmask[0])), (pos.m_blackToMove ? -8 : 8) - 1) & enemyBB[PAWN];
 		tileBlocksCheck |= shift((kingBB & ~(colBitmask[7])), (pos.m_blackToMove ? -8 : 8) + 1) & enemyBB[PAWN];
 	}
-	uint64_t slidingBB = ((enemyBB[BISHOP] | enemyBB[QUEEN]) & attacks<BISHOP>(kingPos, 0)) | ((enemyBB[ROOK] | enemyBB[QUEEN]) & attacks<ROOK>(kingPos, 0));
+	const uint64_t diagBB_ = (enemyBB[BISHOP] | enemyBB[QUEEN]) & attacks<BISHOP>(kingPos, 0);
+	const uint64_t straightBB_ = (enemyBB[ROOK] | enemyBB[QUEEN]) & attacks<ROOK>(kingPos, 0);
+	uint64_t slidingBB = diagBB_ | straightBB_;
 	while (slidingBB != 0) {
 		int8_t piecePos = getLSBPos(slidingBB);
 		uint64_t pcsBetween = betweenBitboard[kingPos][piecePos] & allPcsBB;
@@ -300,9 +301,25 @@ inline void getPinsAndChecks(const Position& pos) {
 			inCheck = 1;
 			tileBlocksCheck |= betweenBitboard[kingPos][piecePos];
 			tileBlocksCheck |= 1ULL << piecePos;
-		}
-		else {
-			//If only one piece in between sliding piece and 
+			//Save some work in generateKingMove; !calcAttackedTiles, 
+			//because we are going to do it anyway if calcAttackedTiles
+			if (!calcAttackedTiles && betweenBitboard[kingPos][piecePos] != 0) {
+				if (diagBB_ & (1ULL << piecePos)) {
+					if (getDiagM(kingPos) == getDiagM(piecePos)) {
+						tileAttacked |= mainDiagBitmask[getDiagM(kingPos)];
+					} else {
+						tileAttacked |= scndDiagBitmask[getDiagS(kingPos)];
+					}
+				} else {
+					if (getX(kingPos) == getX(piecePos)) {
+						tileAttacked |= colBitmask[getX(kingPos)];
+					} else {
+						tileAttacked |= rowBitmask[getY(kingPos)];
+					}
+				}
+			}
+		} else {
+			//If only one piece in between sliding piece and king
 			if ((pcsBetween & pcsBetween - 1) == 0) {
 				//Here we never check if piece is friendly, but doesn't matter, because we won't try move it anyway
 				tilePinnedBitmask |= pcsBetween;
