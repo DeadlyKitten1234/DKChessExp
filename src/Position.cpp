@@ -458,6 +458,20 @@ void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCas
 void Position::makeNullMove() {
 	m_blackToMove = !m_blackToMove;
 	zHash ^= hashNumBlackToMove;
+	if (m_possibleEnPassant != -1) {
+		zHash ^= hashNumsEp[getX(m_possibleEnPassant)];
+		m_possibleEnPassant = -1;
+	}
+}
+
+void Position::undoNullMove(int8_t possibleEnPassant_) {
+	m_blackToMove = !m_blackToMove;
+	zHash ^= hashNumBlackToMove;
+	//m_possibleEnPassant should be = -1
+	if (possibleEnPassant_ != -1) {
+		zHash ^= hashNumsEp[getX(possibleEnPassant_)];
+	}
+	m_possibleEnPassant = possibleEnPassant_;
 }
 
 void Position::initLegalMoves() {
