@@ -22,6 +22,7 @@ public:
 	void updateHistoryNewSearch();
 
 	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
+	const int MAX_PLY_MATE = 128;
 	//Used for ordering moves
 	int* evalGuess;
 
@@ -50,7 +51,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 }
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
-	if (depth == 0) {
+	if (depth <= 0) {
 		return searchOnlyCaptures(alpha, beta);
 	}
 
@@ -73,7 +74,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			}
 			alpha = max(alpha, ttEntryRes->eval);
 		}
-
 		//Higher bound
 		if (ttEntryRes->boundType() == BoundType::HighBound) {
 			//We have guaranteed a better position
@@ -93,6 +93,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth == 1 && staticEval + pieceValue[QUEEN] + 2 * pieceValue[PAWN] <= alpha) {
 		return alpha;
 	}
+	//Fail low means no move gives a score > alpha
+	//Starts with 1 and is set to 0 if a score > alpha is achieved
+	bool failLow = 1;
+	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
+	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 
 	pos->updateLegalMoves<0>();
 	const int16_t movesCnt = pos->m_legalMovesCnt;
@@ -103,33 +108,48 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
+
+	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
+	if (!pos->friendlyInCheck) {
+		const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
+		const bool scndLastWasNull = (movesHistory.size() >= 2 && movesHistory.kElFromTop(1) == nullMove);
+		//Don't chain a lot of null moves
+		if (!(lastWasNull && scndLastWasNull)) {
+			int8_t depthReduction = 5 + depth / 3;
+			if (lastWasNull) {
+				//If last was null check another null move to detect zugzwang without reducing depth
+				depthReduction = 0;
+			}
+			pos->makeNullMove();
+			movesHistory.push(nullMove);
+			pos->m_legalMovesStartIdx += movesCnt;
+			int16_t nullRes = -search<0>(depth - depthReduction, -beta, -beta + 1);
+			pos->undoNullMove(possibleEnPassant);
+			pos->m_legalMovesStartIdx -= movesCnt;
+			movesHistory.pop();
+			if (nullRes >= beta) {
+				return beta;
+			}
+		}
+	}
+	//Futility pruning
+	if (!pos->friendlyInCheck && depth < 8 &&
+		abs((abs(alpha) - pieceValue[KING])) < MAX_PLY_MATE &&
+		abs((abs(beta) - pieceValue[KING])) < MAX_PLY_MATE) {
+		if (staticEval - 128 * depth >= beta) {
+			return beta;
+		}
+	}
+
 	int16_t moveIndices[256];
 	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
 
-	//Fail low means no move gives a score > alpha
-	//Starts with 1 and is set to 0 if a score > alpha is achieved
-	bool failLow = 1;
-	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
-	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move in tt
 		if (i != movesCnt - 1) {
 			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
-		//Futility pruning
-		if (depth == 1) {
-			int16_t maxIncrese = 0;
-			if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
-				maxIncrese += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
-			}
-			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
-				maxIncrese += pieceValue[getPromotionPiece(curMove)];
-			}
-			if (staticEval + maxIncrese + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
-				break;
-			}
-		}
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 		pos->m_legalMovesStartIdx += movesCnt;
@@ -140,7 +160,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		if (i == 0 || depth <= 2) {
 			res = -search<0>(depth - 1, -beta, -alpha);
 		} else {
-			//Perftorm zero window search
+			//Perform zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
 			res = -search<0>(depth - 1, -alpha - 1, -alpha);
@@ -155,7 +175,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		movesHistory.pop();
 
 		//If mate ? decrease value with depth
-		if (res > pieceValue[KING] - 100) {
+		if (res > pieceValue[KING] - MAX_PLY_MATE) {
 			res--;
 		}
 		//Alpha-beta cutoff
@@ -172,7 +192,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				int clampedBonus = std::clamp(depth * depth, -MAX_HISTORY, MAX_HISTORY);
 				*hh += clampedBonus - *hh * clampedBonus / MAX_HISTORY;
 				//Update counter moves heuristic
-				if (!movesHistory.empty()) {
+				if (!movesHistory.empty() && movesHistory.top() != nullMove) {
 					const int8_t lastMoveEnd = getEndPos(movesHistory.top());
 					int16_t* const cMove = &counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd];
 					*cMove = curMove;
@@ -202,6 +222,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
+//https://www.chessprogramming.org/Quiescence_Search
 inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Don't force player to capture if it is worse for him
 	//(example: don't force Qxa3 if then there is bxa3)
@@ -210,6 +231,14 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	if (staticEval >= beta) {
 		return staticEval;
 	}
+	//If even capturing a queen can't improve position
+	if (staticEval + pieceValue[QUEEN] + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
+		return alpha;
+	}
+	if (staticEval - pieceValue[QUEEN] - (2 * pieceValue[PAWN]) >= beta) {
+		return beta;
+	}
+
 	//Check tt
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
@@ -243,21 +272,30 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		alpha = staticEval;
 		failLow = 0;
 	}
-	//If even capturing a queen can't improve position
-	if (staticEval + pieceValue[QUEEN] + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
-		return alpha;
-	}
 
 	pos->updateLegalMoves<1>();
 	const int16_t movesCnt = pos->m_legalMovesCnt;
-	int16_t moveIndices[256];
-
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
-
-	int16_t curBestMove = nullMove;
 	const int16_t* moves = pos->m_legalMoves + pos->m_legalMovesStartIdx;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
+	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
+	if (!pos->friendlyInCheck) {
+		pos->makeNullMove();
+		movesHistory.push(nullMove);
+		pos->m_legalMovesStartIdx += movesCnt;
+		int16_t nullRes = -searchOnlyCaptures(-beta, -beta + 1);
+		pos->undoNullMove(possibleEnPassant);
+		pos->m_legalMovesStartIdx -= movesCnt;
+		movesHistory.pop();
+		if (nullRes >= beta) {
+			return beta;
+		}
+	}
+	
+	int16_t moveIndices[256];
+	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
+
+	int16_t curBestMove = nullMove;
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move
 		if (i != movesCnt - 1) {
@@ -362,7 +400,7 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		//Add history heuristic
 		curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
 		//Add counter move heuristic
-		if (!movesHistory.empty()) {
+		if (!movesHistory.empty() && movesHistory.top() != nullMove) {
 			const int8_t lastMoveEnd = getEndPos(movesHistory.top());
 			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd]) {
 				curGuess += COUNTER_MOVE_BONUS;
