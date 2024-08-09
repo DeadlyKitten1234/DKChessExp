@@ -76,6 +76,15 @@ inline uint64_t attacks(const int8_t sq, const uint64_t blockers) {
 		return bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)] |
 			   rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)];
 	}
+	return 0;
+}
+template<bool blackToMove>
+inline uint64_t pawnAttacks(const int8_t sq) {
+	if constexpr (blackToMove) {
+		return (getX(sq) != 0 ? 1 << (sq - 8 - 1) : 0) | (getX(sq) != 7 ? 1 << (sq - 8 + 1) : 0);
+	} else {
+		return (getX(sq) != 0 ? 1 << (sq + 8 - 1) : 0) | (getX(sq) != 7 ? 1 << (sq + 8 + 1) : 0);
+	}
 }
 
 inline int8_t kingMovesCnt(const int8_t pos, const uint64_t friendlyBB) {
