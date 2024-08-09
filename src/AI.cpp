@@ -6,7 +6,7 @@ const int AI::COUNTER_MOVE_BONUS = 300;
 AI::AI() {
 	pos = nullptr;
 	bestMove = nullMove;
-	evalGuess = new int[256]();
+	evalGuess = new int[MAX_LEGAL_MOVES]();
 	movesHistory.init(256);
 	searchEndTime = 0;
 }

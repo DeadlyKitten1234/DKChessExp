@@ -58,7 +58,6 @@ int main(int argc, char* argv[]) {
     unsigned long long framesSinceSecond = 0;
 
     initData();
-    Position::initLegalMoves();
     tt.setSize(64);
     initTests();
     Position* pos = new Position();

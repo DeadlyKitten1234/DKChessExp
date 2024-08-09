@@ -27,7 +27,7 @@ private:
 	template<bool root = 1>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
-	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull);
+	inline void orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull);
 	void resetHistory();
 	void updateHistoryNewSearch();
 
@@ -121,9 +121,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 
-	pos->updateLegalMoves<0>();
+	int16_t moves[256];
+	pos->updateLegalMoves<0>(moves);
 	int16_t movesCnt = pos->m_legalMovesCnt;
-	const int16_t* moves = pos->m_legalMoves + pos->m_legalMovesStartIdx;
 	if (movesCnt == 0) {
 		if (pos->friendlyInCheck) {
 			return -pieceValue[KING];
@@ -146,7 +146,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//Make move
 			pos->makeNullMove();
 			movesHistory.push(nullMove);
-			pos->m_legalMovesStartIdx += movesCnt;
 			//Search
 			int16_t nullRes = -search<0>(depth - depthReduction, -beta, -beta + 1);
 			//Get best move after null move
@@ -157,7 +156,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			}
 			//Undo move
 			pos->undoNullMove(possibleEnPassant);
-			pos->m_legalMovesStartIdx -= movesCnt;
 			movesHistory.pop();
 			//Prune
 			if (nullRes >= beta) {
@@ -181,7 +179,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	int16_t moveIndices[256];
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
+	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
 
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move in tt
@@ -208,7 +206,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
-		pos->m_legalMovesStartIdx += movesCnt;
 		movesHistory.push(curMove);
 
 		//Search
@@ -226,7 +223,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 
 		//Undo move
-		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		movesHistory.pop();
 
@@ -336,19 +332,17 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		failLow = 0;
 	}
 
-	pos->updateLegalMoves<1>();
+	int16_t moves[256];
+	pos->updateLegalMoves<1>(moves);
 	const int16_t movesCnt = pos->m_legalMovesCnt;
-	const int16_t* moves = pos->m_legalMoves + pos->m_legalMovesStartIdx;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
 	if (!pos->friendlyInCheck) {
 		pos->makeNullMove();
 		movesHistory.push(nullMove);
-		pos->m_legalMovesStartIdx += movesCnt;
 		int16_t nullRes = -searchOnlyCaptures(-beta, -beta + 1);
 		pos->undoNullMove(possibleEnPassant);
-		pos->m_legalMovesStartIdx -= movesCnt;
 		movesHistory.pop();
 		if (nullRes >= beta) {
 			return beta;
@@ -356,7 +350,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	}
 	
 	int16_t moveIndices[256];
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove), nullMove);
+	orderMoves(moves, movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove), nullMove);
 
 	int16_t curBestMove = nullMove;
 	for (int16_t i = 0; i < movesCnt; i++) {
@@ -385,7 +379,6 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 
 		//Make move
 		int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
-		pos->m_legalMovesStartIdx += movesCnt;
 		movesHistory.push(curMove);
 		//Search
 		int16_t res = 0;
@@ -401,7 +394,6 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			}
 		}
 		//Undo move
-		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		movesHistory.pop();
 
@@ -432,7 +424,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull) {
+inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull) {
 	//Note: here we guess based on the player to move
 	//no need to complicate things with if (black) {} everywhere
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
@@ -451,17 +443,17 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 	int8_t bmAfterNullSt = getStartPos(bestMoveAfterNull);
 	int8_t bmAfterNullEnd = getEndPos(bestMoveAfterNull);
 	
-	for (int16_t i = startIdx; i < endIdx; i++) {
+	for (int16_t i = 0; i < movesCnt; i++) {
 		//Note: here we only guess how good a move is, so we can afford to make
 		//guesses overinflated since the only thing that matters is their relative values
-		const int16_t curMove = pos->m_legalMoves[i];
+		const int16_t curMove = moves[i];
 		const int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
 		const PieceType pt = pos->m_pieceOnTile[stPos]->type;
 		int curGuess = 0;
-		indices[i - startIdx] = i - startIdx;
+		indices[i] = i;
 		//Favor move in tt
 		if (curMove == ttBestMove) {
-			evalGuess[i - startIdx] = 0x7FFF;//<- just a sufficiently large number
+			evalGuess[i] = 0x7FFF;//<- just a sufficiently large number
 			continue;
 		}
 
@@ -480,11 +472,11 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 				curGuess += COUNTER_MOVE_BONUS;
 			}
 		}
-		if (bestMoveAfterNull != nullMove) {
-			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
-				curGuess += COUNTER_MOVE_BONUS / 3;
-			}
-		}
+		//if (bestMoveAfterNull != nullMove) {
+		//	if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
+		//		curGuess += COUNTER_MOVE_BONUS / 3;
+		//	}
+		//}
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
@@ -518,10 +510,10 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		}
 
 		//Write in guess array that will later be used to sort the moves
-		evalGuess[i - startIdx] = curGuess;
+		evalGuess[i] = curGuess;
 	}
 	//Use indices to "link" evalGuess and pos->m_legalMove together because use std::sort
-	std::sort(indices, indices + (endIdx - startIdx),
+	std::sort(indices, indices + movesCnt,
 		[this](const int16_t idx1, const int16_t idx2) {
 			return evalGuess[idx1] > evalGuess[idx2];
 		}

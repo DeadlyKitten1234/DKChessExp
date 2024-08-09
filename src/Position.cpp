@@ -3,14 +3,13 @@
 #include "ZobristHashing.h"
 using std::swap;
 using std::abs;
-int16_t* Position::m_legalMoves = nullptr;
 const char* Position::m_startFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 Position::Position() {
 	m_blackToMove = 0;
 	m_bitmaskCastling = 0;
 	m_possibleEnPassant = -1;
-	m_legalMovesStartIdx = 0;
+	m_legalMoves = new int16_t[MAX_LEGAL_MOVES]();
 	m_whitePiece = nullptr;
 	m_blackPiece = nullptr;
 	m_whitePiecesCnt = nullptr;
@@ -48,6 +47,7 @@ void Position::readFEN(const char* fen) {
 	m_blackPiecesCnt = new int8_t[6]();
 	m_whiteBitboards = new uint64_t[6]();
 	m_blackBitboards = new uint64_t[6]();
+	m_legalMoves = new int16_t[MAX_LEGAL_MOVES]();
 	m_possibleEnPassant = -1;
 	m_whiteAllPiecesBitboard = 0;
 	m_blackAllPiecesBitboard = 0;
@@ -199,7 +199,7 @@ void Position::readFEN(const char* fen) {
 	//Set zobrist hash; Do it here for the same reason as setting indices
 	zHash = getPositionHash(*this);
 	//Set legal moves
-	updateLegalMoves<0>();
+	updateLegalMoves<0>(this->m_legalMoves);
 }
 
 uint64_t Position::getZHashIfMoveMade(const int16_t move) const {
@@ -474,13 +474,6 @@ void Position::undoNullMove(int8_t possibleEnPassant_) {
 	m_possibleEnPassant = possibleEnPassant_;
 }
 
-void Position::initLegalMoves() {
-	m_legalMoves = new int16_t[65536]();
-	for (int i = 0; i < 65536; i++) {
-		m_legalMoves[i] = createMove(0, 0, PieceType::UNDEF);
-	}
-}
-
 void Position::deleteData() {
 	if (m_whitePiece != nullptr) {
 		for (int i = 0; i < m_whiteTotalPiecesCnt; i++) {
@@ -508,5 +501,8 @@ void Position::deleteData() {
 	}
 	if (m_blackBitboards != nullptr) {
 		delete[] m_blackBitboards;
+	}
+	if (m_legalMoves != nullptr) {
+		delete[] m_legalMoves;
 	}
 }

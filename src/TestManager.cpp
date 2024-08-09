@@ -47,25 +47,24 @@ long long perft(Position& pos, int depth, bool root) {
     long long ans = 0;
     int8_t bitmaskCastling = pos.m_bitmaskCastling;
     int8_t possibleEnPassant = pos.m_possibleEnPassant;
-    pos.updateLegalMoves<0>();
+    int16_t moves[256];
+    pos.updateLegalMoves<0>(moves);
     if (depth == 1) {
         return pos.m_legalMovesCnt;
     }
     int16_t cnt = pos.m_legalMovesCnt;
-    const int16_t* moves = pos.m_legalMoves + pos.m_legalMovesStartIdx;
+
     for (int16_t i = 0; i < cnt; i++) {
         if (root) {
             printName(moves[i]);
             cout << ": ";
         }
         int8_t capturedPieceIdx = pos.makeMove(moves[i]);
-        pos.m_legalMovesStartIdx += cnt;
         long long increase = perft(pos, depth - 1, 0);
         if (root) {
             cout << increase << "\n";
         }
         ans += increase;
-        pos.m_legalMovesStartIdx -= cnt;
         pos.undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
     }
     pos.m_legalMovesCnt = cnt;

@@ -5,6 +5,7 @@
 #include "Move.h"
 using std::abs;
 
+extern const int16_t MAX_LEGAL_MOVES;
 extern uint64_t tileBlocksCheck;
 extern uint64_t pinnedPossibleMoves[64];
 extern uint64_t tilePinnedBitmask;
@@ -352,9 +353,9 @@ inline void getPinsAndChecks(const Position& pos) {
 
 //Returns size
 template<bool capturesOnly>
-inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx) {
+inline int16_t generateMoves(const Position& pos, int16_t* out) {
 	Piece** friendlyPiece = (pos.m_blackToMove ? pos.m_blackPiece : pos.m_whitePiece);
-	int16_t movesCnt = outStIdx;
+	int16_t movesCnt = 0;
 	//Caclulate if it is better to use attacked tiles (full explaination above getPinsAndChecks)
 	const uint64_t friendlyPcsBB = (pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
 	int8_t enemyNonPawnPcs = (pos.m_blackToMove ? pos.m_whiteTotalPiecesCnt - pos.m_whitePiecesCnt[PAWN] : pos.m_blackTotalPiecesCnt - pos.m_blackPiecesCnt[PAWN]);
@@ -370,7 +371,7 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx
 		movesCnt += generateKingMoves<capturesOnly, 1>(pos, out, movesCnt);
 	}
 	if (inDoubleCheck) {
-		return movesCnt - outStIdx;
+		return movesCnt;
 	}
 	//Pawns
 	//We choose this order of creating moves (least valuable pieces -> most valuable pieces)
@@ -381,5 +382,5 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, int16_t outStIdx
 	movesCnt += generatePieceMoves<BISHOP, capturesOnly>(pos, out, movesCnt);
 	movesCnt += generatePieceMoves<ROOK, capturesOnly>(pos, out, movesCnt);
 	movesCnt += generatePieceMoves<QUEEN, capturesOnly>(pos, out, movesCnt);
-	return movesCnt - outStIdx;
+	return movesCnt;
 }

@@ -22,13 +22,13 @@ public:
 
 	template<bool capturesOnly>
 	void updateLegalMoves();
+	template<bool capturesOnly>
+	void updateLegalMoves(int16_t out[256]);
 	inline int16_t evaluate();
 
-	static void initLegalMoves();
 	static const char* m_startFEN;
 
-	static int16_t* m_legalMoves;
-	int16_t m_legalMovesStartIdx;
+	int16_t* m_legalMoves;
 	int16_t m_legalMovesCnt;
 
 	int16_t whiteEndgameWeight;//If = -1 means needs an update
@@ -127,8 +127,13 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 }
 
 template<bool capturesOnly>
-void Position::updateLegalMoves() {
-	m_legalMovesCnt = generateMoves<capturesOnly>(*this, m_legalMoves, m_legalMovesStartIdx);
+inline void Position::updateLegalMoves() {
+	updateLegalMoves<capturesOnly>(this->m_legalMoves);
+}
+
+template<bool capturesOnly>
+void Position::updateLegalMoves(int16_t out[256]) {
+	m_legalMovesCnt = generateMoves<capturesOnly>(*this, out);
 	friendlyInCheck = inCheck;//inCheck is declared in MoveGenerator.h
 	enemyPawnAttacksBitmask = pawnAtt;//pawnAtt declared in MoveGenerator.h
 }
