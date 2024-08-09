@@ -8,12 +8,13 @@ AI::AI() {
 	bestMove = nullMove;
 	evalGuess = new int[256]();
 	movesHistory.init(256);
+	searchEndTime = 0;
 }
 
 AI::~AI() {
-	if (pos != nullptr) {
-		delete pos;
-	}
+	//if (pos != nullptr) {
+	//	delete pos;
+	//}
 	if (evalGuess != nullptr) {
 		delete[] evalGuess;
 	}
@@ -22,6 +23,11 @@ AI::~AI() {
 void AI::initPos(Position* pos_) {
 	pos = pos_;
 	resetHistory();
+}
+
+int16_t AI::startSearch(uint64_t timeToSearch) {
+	searchEndTime = Clock::now() + timeToSearch;
+	return iterativeDeepening(127);
 }
 
 void AI::resetHistory() {

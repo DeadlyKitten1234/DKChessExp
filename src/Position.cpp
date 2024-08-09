@@ -475,8 +475,8 @@ void Position::undoNullMove(int8_t possibleEnPassant_) {
 }
 
 void Position::initLegalMoves() {
-	m_legalMoves = new int16_t[8192]();
-	for (int i = 0; i < 8192; i++) {
+	m_legalMoves = new int16_t[65536]();
+	for (int i = 0; i < 65536; i++) {
 		m_legalMoves[i] = createMove(0, 0, PieceType::UNDEF);
 	}
 }

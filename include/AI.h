@@ -1,7 +1,8 @@
 #pragma once
-#include "Position.h"
-#include "misc.h"
 #include "TranspositionTable.h"
+#include "Position.h"
+#include "Clock.h"
+#include "misc.h"
 #include <iostream>
 #include <xmmintrin.h>//_mm_prefetch
 #include <algorithm>
@@ -12,19 +13,29 @@ public:
 	AI();
 	~AI();
 
-	//Warning: pos is referece => changes made by the AI will impact the original position
 	void initPos(Position* pos_);
+	int16_t startSearch(uint64_t timeToSearch);
+	int16_t bestMove;
+
+private:
+	uint64_t searchEndTime;
+
+	//Warning: pos is referece => changes made by the AI will impact the original position
+	Position* pos;
+
 	int16_t iterativeDeepening(int8_t depth);
 	template<bool root = 1>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
+	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull);
 	void resetHistory();
 	void updateHistoryNewSearch();
 
-	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull);
-	const int MAX_PLY_MATE = 128;
+	const int MAX_PLY_MATE = 256;
 	//Used for ordering moves
 	int* evalGuess;
+
+	Stack<int16_t> movesHistory;
 
 	//<https://www.chessprogramming.org/History_Heuristic>
 	int historyHeuristic[2][6][64];
@@ -33,24 +44,33 @@ public:
 	//<https://www.chessprogramming.org/Countermove_Heuristic>
 	int16_t counterMove[2][6][64];
 	static const int COUNTER_MOVE_BONUS;
-
-	Stack<int16_t> movesHistory;
-	int16_t bestMove;
-	//Warning: pos is referece => changes made by the AI will impact the original position
-	Position* pos;
 };
-
+#include <iomanip>
 inline int16_t AI::iterativeDeepening(int8_t depth) {
 	int16_t eval = 0;
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
-		eval = search(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+		int16_t curEval = search(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+
+		if (Clock::now() >= searchEndTime) {
+			std::cout << "Search time ended; { Eval: " << eval << "; Best move: ";
+			printName(bestMove);
+			std::cout << "; }\n";
+			return eval;
+		}
+		std::cout << "Depth " << std::setw(2) << (int)i << ": { Eval = " << std::setw(5) << curEval << "; Best move = ";
+		printName(bestMove);
+		std::cout << "; }\n";
+		eval = curEval;
 	}
 	return eval;
 }
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
+	if (Clock::now() >= searchEndTime) {
+		return 0;
+	}
 	if (depth <= 0) {
 		return searchOnlyCaptures(alpha, beta);
 	}
@@ -210,6 +230,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		movesHistory.pop();
 
+		if (Clock::now() >= searchEndTime) {
+			return 0;
+		}
+
 		//If mate ? decrease value with depth
 		if (res > pieceValue[KING] - MAX_PLY_MATE) {
 			res--;
@@ -260,6 +284,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 //https://www.chessprogramming.org/Quiescence_Search
 inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
+	if (Clock::now() >= searchEndTime) {
+		return 0;
+	}
 	//Don't force player to capture if it is worse for him
 	//(example: don't force Qxa3 if then there is bxa3)
 	int16_t staticEval = pos->evaluate();
@@ -377,6 +404,10 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		pos->m_legalMovesStartIdx -= movesCnt;
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 		movesHistory.pop();
+
+		if (Clock::now() >= searchEndTime) {
+			return 0;
+		}
 
 		if (res >= beta) {
 			//Don't replace ttEntry with garbage one useful only for qsearch

@@ -10,9 +10,7 @@ GameManager::~GameManager() {
 
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
-		long stTime = clock();
-		std::cout << m_ai.iterativeDeepening(8);
-		std::cout << " Time: " << clock() - stTime << '\n';
+		m_ai.startSearch(500);
 		m_pos->makeMove(m_ai.bestMove);
 		m_pos->updateLegalMoves<0>();
 		tt.newGen();

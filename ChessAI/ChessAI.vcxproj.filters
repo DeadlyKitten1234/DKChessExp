@@ -33,9 +33,6 @@
     <ClCompile Include="..\main.cpp">
       <Filter>_Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\src\MoveGenerator.cpp">
-      <Filter>_Source Files\AI</Filter>
-    </ClCompile>
     <ClCompile Include="..\src\AI.cpp">
       <Filter>_Source Files\AI</Filter>
     </ClCompile>
@@ -84,11 +81,11 @@
     <ClCompile Include="..\src\GameManager.cpp">
       <Filter>UI and Input</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\MoveGenerator.cpp">
+      <Filter>Board</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\include\MoveGenerator.h">
-      <Filter>_Header Files\AI</Filter>
-    </ClInclude>
     <ClInclude Include="..\include\AI.h">
       <Filter>_Header Files\AI</Filter>
     </ClInclude>
@@ -137,8 +134,14 @@
     <ClInclude Include="..\include\GameManager.h">
       <Filter>UI and Input</Filter>
     </ClInclude>
+    <ClInclude Include="..\include\MoveGenerator.h">
+      <Filter>Board</Filter>
+    </ClInclude>
     <ClInclude Include="..\include\EvalValues.h">
-      <Filter>_Header Files\AI</Filter>
+      <Filter>Board</Filter>
+    </ClInclude>
+    <ClInclude Include="..\include\Clock.h">
+      <Filter>_Header Files</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
