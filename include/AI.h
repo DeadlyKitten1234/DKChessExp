@@ -21,7 +21,7 @@ public:
 	void resetHistory();
 	void updateHistoryNewSearch();
 
-	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove = nullMove);
+	inline void orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull);
 	const int MAX_PLY_MATE = 128;
 	//Used for ordering moves
 	int* evalGuess;
@@ -58,6 +58,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	int16_t curBestMove = nullMove;
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
+	int16_t eval = pos->evaluate();
+	int16_t ttBestMove = (foundTTEntry ? ttEntryRes->bestMove : nullMove);
 	if (foundTTEntry && ttEntryRes->depth >= depth) {
 		//Renew gen (make it more valuable when deciding which entry to overwrite)
 		ttEntryRes->setGen(tt.gen);
@@ -73,6 +75,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				return beta;
 			}
 			alpha = max(alpha, ttEntryRes->eval);
+			eval = max(eval, ttEntryRes->eval);
 		}
 		//Higher bound
 		if (ttEntryRes->boundType() == BoundType::HighBound) {
@@ -89,8 +92,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			return ttEntryRes->eval;
 		}
 	}
-	int16_t staticEval = pos->evaluate();
-	if (depth == 1 && staticEval + pieceValue[QUEEN] + 2 * pieceValue[PAWN] <= alpha) {
+	if (depth == 1 && eval + pieceValue[QUEEN] + 2 * pieceValue[PAWN] <= alpha) {
 		return alpha;
 	}
 	//Fail low means no move gives a score > alpha
@@ -100,7 +102,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 
 	pos->updateLegalMoves<0>();
-	const int16_t movesCnt = pos->m_legalMovesCnt;
+	int16_t movesCnt = pos->m_legalMovesCnt;
 	const int16_t* moves = pos->m_legalMoves + pos->m_legalMovesStartIdx;
 	if (movesCnt == 0) {
 		if (pos->friendlyInCheck) {
@@ -109,6 +111,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		return 0;
 	}
 
+	int16_t bestMoveAfterNull = nullMove;
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
 	if (!pos->friendlyInCheck) {
 		const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
@@ -120,34 +123,45 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				//If last was null check another null move to detect zugzwang without reducing depth
 				depthReduction = 0;
 			}
+			//Make move
 			pos->makeNullMove();
 			movesHistory.push(nullMove);
 			pos->m_legalMovesStartIdx += movesCnt;
+			//Search
 			int16_t nullRes = -search<0>(depth - depthReduction, -beta, -beta + 1);
+			//Get best move after null move
+			bool foundNullMoveTTE = 0;
+			TTEntry* nullMoveTTE = tt.find(pos->zHash, foundNullMoveTTE);
+			if (foundNullMoveTTE) {
+				bestMoveAfterNull = nullMoveTTE->bestMove;
+			}
+			//Undo move
 			pos->undoNullMove(possibleEnPassant);
 			pos->m_legalMovesStartIdx -= movesCnt;
 			movesHistory.pop();
+			//Prune
 			if (nullRes >= beta) {
 				return beta;
 			}
 		}
 	}
-	//Futility pruning
+
+	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
 	if (!pos->friendlyInCheck && depth < 8 &&
 		abs((abs(alpha) - pieceValue[KING])) < MAX_PLY_MATE &&
 		abs((abs(beta) - pieceValue[KING])) < MAX_PLY_MATE) {
 		//I think these are okay?
-		if (staticEval - pieceValue[BISHOP] / 2 * depth - 2*pieceValue[PAWN]/*safety margin*/ >= beta) {
+		if (eval - pieceValue[BISHOP] / 2 * depth - 2*pieceValue[PAWN]/*safety margin*/ >= beta) {
 			return beta;
 		}
-		if (staticEval + pieceValue[BISHOP] / 2 * depth + 2*pieceValue[PAWN]/*safety margin*/ <= alpha) {
+		if (eval + pieceValue[BISHOP] / 2 * depth + 2*pieceValue[PAWN]/*safety margin*/ <= alpha) {
 			//Returning beta should also be fine
-			return staticEval;
+			return beta;
 		}
 	}
 
 	int16_t moveIndices[256];
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
+	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
 
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move in tt
@@ -155,6 +169,22 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
+		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
+		if (depth <= 2) {
+			int16_t maxIncrese = 0;
+			if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
+				maxIncrese += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
+			}
+			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
+				maxIncrese += pieceValue[getPromotionPiece(curMove)];
+			}
+			if (depth == 2 && eval - maxIncrese - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
+				return beta;
+			}
+			if (depth == 1 && eval + maxIncrese + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
+				break;
+			}
+		}
 
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
@@ -235,7 +265,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	int16_t staticEval = pos->evaluate();
 	//When going to cut, don't tt.find, because its expensive
 	if (staticEval >= beta) {
-		return staticEval;
+		return beta;
 	}
 	//If even capturing a queen can't improve position
 	if (staticEval + pieceValue[QUEEN] + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
@@ -272,7 +302,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1;
 	if (staticEval >= beta) {
-		return staticEval;
+		return beta;
 	}
 	if (staticEval > alpha) {
 		alpha = staticEval;
@@ -299,7 +329,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	}
 	
 	int16_t moveIndices[256];
-	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove));
+	orderMoves(pos->m_legalMovesStartIdx, pos->m_legalMovesStartIdx + movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove), nullMove);
 
 	int16_t curBestMove = nullMove;
 	for (int16_t i = 0; i < movesCnt; i++) {
@@ -320,6 +350,9 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			maxIncrease += pieceValue[getPromotionPiece(curMove)];
 		}
 		if (staticEval + maxIncrease + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
+			continue;
+		}
+		if (staticEval - maxIncrease - (2 * pieceValue[PAWN])/*safety margin*/ >= beta) {
 			continue;
 		}
 
@@ -350,7 +383,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			if (!foundTTEntry) {
 				ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
 			}
-			return res;
+			return beta;
 		}
 		if (res > alpha) {
 			alpha = res;
@@ -368,21 +401,25 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove) {
+inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull) {
 	//Note: here we guess based on the player to move
 	//no need to complicate things with if (black) {} everywhere
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
 	const int8_t enemyKingPos = (pos->m_blackToMove ? pos->m_whitePiece[0]->pos : pos->m_blackPiece[0]->pos);
 	uint64_t checksToKing[6] = {
 		0,//King can't check another king
-		0,//Queen will be redundant if evaluated with rook and bishop, so after arr init do bitwise |
+		0,//Queen will be redundant if evaluated, so after arr init do bitwise | on bishop and rook
 		attacks<BISHOP>(enemyKingPos, allPcs),
 		attacks<KNIGHT>(enemyKingPos, allPcs),
 		attacks<ROOK>(enemyKingPos, allPcs),
-		0//maybe later add pawns
+		pawnAtt<!pos->m_blackToMove>(enemyKingPos)
 	};
 	//Queen checks = rook checks | bishop checks
 	checksToKing[QUEEN] = checksToKing[BISHOP] | checksToKing[ROOK];
+
+	int8_t bmAfterNullSt = getStartPos(bestMoveAfterNull);
+	int8_t bmAfterNullEnd = getEndPos(bestMoveAfterNull);
+	
 	for (int16_t i = startIdx; i < endIdx; i++) {
 		//Note: here we only guess how good a move is, so we can afford to make
 		//guesses overinflated since the only thing that matters is their relative values
@@ -412,6 +449,11 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 				curGuess += COUNTER_MOVE_BONUS;
 			}
 		}
+		if (bestMoveAfterNull != nullMove) {
+			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
+				curGuess += COUNTER_MOVE_BONUS / 3;
+			}
+		}
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
@@ -421,15 +463,13 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 			
 			//pieceValue[KING] = inf; so king captures would be placed last; to prevent this add if (pt == KING)
 			if (pt == KING) {
-				//Capturing with king is generally not preferable, so mult only by 11
-				curGuess += 11 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[QUEEN] * 3 / 2;
+				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[QUEEN] * 3 / 2;
 			} else {
 				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
 			}
 		}
 		//If tile attacked by opponent pawn
 		if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
-			//mult by 4, because why not?
 			curGuess -= 4 * pieceValue[pt];
 		}
 
@@ -441,9 +481,9 @@ inline void AI::orderMoves(int16_t startIdx, int16_t endIdx, int16_t* indices, i
 		}
 		//Favor checks slightly
 		if (checksToKing[pt] & (1ULL << endPos)) {
-			//Add pieceValue[piece to make move] / 16, because generally checks with
+			//Add pieceValue[piece to make move] / 32, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
-			curGuess += 75 + (pieceValue[pt] / 16);
+			curGuess += 75 + (pieceValue[pt] / 32);
 		}
 
 		//Write in guess array that will later be used to sort the moves
