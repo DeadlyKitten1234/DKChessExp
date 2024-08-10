@@ -133,7 +133,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	int16_t bestMoveAfterNull = nullMove;
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
-	if (!pos->friendlyInCheck) {
+	if (!pos->friendlyInCheck && 
+		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
+		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
 		const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
 		const bool scndLastWasNull = (movesHistory.size() >= 2 && movesHistory.kElFromTop(1) == nullMove);
 		//Don't chain a lot of null moves
@@ -166,8 +168,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
 	if (!pos->friendlyInCheck && depth < 8 &&
-		abs((abs(alpha) - pieceValue[KING])) < MAX_PLY_MATE &&
-		abs((abs(beta) - pieceValue[KING])) < MAX_PLY_MATE) {
+		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
+		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
 		//I think these are okay?
 		if (eval - pieceValue[BISHOP] / 2 * depth - 2*pieceValue[PAWN]/*safety margin*/ >= beta) {
 			return beta;
@@ -232,7 +234,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		//If mate ? decrease value with depth
 		if (res > pieceValue[KING] - MAX_PLY_MATE) {
-			res--;
+			res -= 2;
 		}
 		//Alpha-beta cutoff
 		if (res >= beta) {
