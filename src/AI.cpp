@@ -9,6 +9,7 @@ AI::AI() {
 	evalGuess = new int[MAX_LEGAL_MOVES]();
 	movesHistory.init(256);
 	searchEndTime = 0;
+	inNullMoveSearch = 0;
 }
 
 AI::~AI() {
@@ -53,4 +54,5 @@ void AI::updateHistoryNewSearch() {
 		}
 	}
 	movesHistory.clear();
+	inNullMoveSearch = 0;
 }

@@ -44,6 +44,8 @@ private:
 	//<https://www.chessprogramming.org/Countermove_Heuristic>
 	int16_t counterMove[2][6][64];
 	static const int COUNTER_MOVE_BONUS;
+	//<https://www.chessprogramming.org/Null_Move_Pruning>
+	int inNullMoveSearch;
 };
 #include <iomanip>
 inline int16_t AI::iterativeDeepening(int8_t depth) {
@@ -54,7 +56,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 		int16_t curEval = search(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
 
 		if (Clock::now() >= searchEndTime) {
-			std::cout << "Search time ended; { Eval: " << eval << "; Best move: ";
+			std::cout << "Search ended { Eval: " << eval << "; Best move: ";
 			printName(bestMove);
 			std::cout << "; }\n";
 			return eval;
@@ -131,16 +133,30 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		return 0;
 	}
 
-	int16_t bestMoveAfterNull = nullMove;
-	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
-	if (!pos->friendlyInCheck && 
+	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
+	if (!pos->friendlyInCheck && depth < 8 &&
 		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
 		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
+		//I think these are okay?
+		if (eval - pieceValue[BISHOP] / 2 * depth - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
+			return beta;
+		}
+		if (eval + pieceValue[BISHOP] / 2 * depth + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
+			return alpha;
+		}
+	}
+
+	int16_t bestMoveAfterNull = nullMove;
+	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
+	if (!root && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) &&
+		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
+		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
+
 		const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
-		const bool scndLastWasNull = (movesHistory.size() >= 2 && movesHistory.kElFromTop(1) == nullMove);
-		//Don't chain a lot of null moves
-		if (!(lastWasNull && scndLastWasNull)) {
-			int8_t depthReduction = 5 + depth / 3;
+		//Don't chain a lot of null moves, but if last was null and in 
+		//only one null move search, do null movee to detect zugzwang
+		if (inNullMoveSearch == lastWasNull) {
+			int8_t depthReduction = 4 + depth / 3;
 			if (lastWasNull) {
 				//If last was null check another null move to detect zugzwang without reducing depth
 				depthReduction = 0;
@@ -148,8 +164,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//Make move
 			pos->makeNullMove();
 			movesHistory.push(nullMove);
+			inNullMoveSearch++;
 			//Search
-			int16_t nullRes = -search<0>(depth - depthReduction, -beta, -beta + 1);
+			int16_t nullRes = -search<0>(depth - depthReduction - 1, -beta, -beta + 1);
 			//Get best move after null move
 			bool foundNullMoveTTE = 0;
 			TTEntry* nullMoveTTE = tt.find(pos->zHash, foundNullMoveTTE);
@@ -157,26 +174,13 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				bestMoveAfterNull = nullMoveTTE->bestMove;
 			}
 			//Undo move
+			inNullMoveSearch--;
 			pos->undoNullMove(possibleEnPassant);
 			movesHistory.pop();
 			//Prune
 			if (nullRes >= beta) {
-				return beta;
+				return nullRes;
 			}
-		}
-	}
-
-	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
-	if (!pos->friendlyInCheck && depth < 8 &&
-		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
-		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
-		//I think these are okay?
-		if (eval - pieceValue[BISHOP] / 2 * depth - 2*pieceValue[PAWN]/*safety margin*/ >= beta) {
-			return beta;
-		}
-		if (eval + pieceValue[BISHOP] / 2 * depth + 2*pieceValue[PAWN]/*safety margin*/ <= alpha) {
-			//Returning beta should also be fine
-			return beta;
 		}
 	}
 
@@ -461,9 +465,9 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 
 		//Add bonuses; Have to have if(black) here, because template doesn't accept it as argument
 		if (pos->m_blackToMove) {
-			curGuess += 4 * (getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos));
+			curGuess += (getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos)) * 8 / 5;
 		} else {
-			curGuess += 4 * (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos));
+			curGuess += (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos)) * 8 / 5;
 		}
 		//Add history heuristic
 		curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
@@ -474,11 +478,11 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 				curGuess += COUNTER_MOVE_BONUS;
 			}
 		}
-		//if (bestMoveAfterNull != nullMove) {
-		//	if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
-		//		curGuess += COUNTER_MOVE_BONUS / 3;
-		//	}
-		//}
+		if (bestMoveAfterNull != nullMove) {
+			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
+				curGuess += COUNTER_MOVE_BONUS / 3;
+			}
+		}
 
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
@@ -500,9 +504,9 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 
 		//Promoting is good
 		if (getPromotionPiece(curMove) != UNDEF) {
-			//Multiply by 14, because when capturing we multiply 
+			//Multiply by 15, because when capturing we multiply 
 			//by 13 and promoting is more likely to be good (I think)
-			curGuess += 14 * pieceValue[getPromotionPiece(curMove)];
+			curGuess += 15 * pieceValue[getPromotionPiece(curMove)];
 		}
 		//Favor checks slightly
 		if (checksToKing[pt] & (1ULL << endPos)) {
