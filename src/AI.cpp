@@ -1,6 +1,10 @@
 #include "AI.h"
+const int AI::MAX_PLY_MATE = 256;
+const int AI::CHECK_BONUS = 75;
 const int AI::MAX_HISTORY = 625;
 const int AI::COUNTER_MOVE_BONUS = 300;
+const int AI::KILLER_BONUS = 550;
+const int AI::NULL_MOVE_DEFEND_BONUS = 75;
 
 
 AI::AI() {
@@ -28,6 +32,16 @@ void AI::initPos(Position* pos_) {
 
 int16_t AI::startSearch(uint64_t timeToSearch) {
 	searchEndTime = Clock::now() + timeToSearch;
+	//Reset killers
+	for (uint8_t i = 0; i < 128; i++) {
+		if (i == 127) {
+			killers[i][0] = killers[i + 1][0] = nullMove;
+		} else {
+			killers[i][0] = killers[i + 1][0];
+			killers[i][1] = killers[i + 1][1];
+		}
+	}
+	tt.newGen();
 	return iterativeDeepening(127);
 }
 
@@ -42,6 +56,10 @@ void AI::resetHistory() {
 		}
 	}
 	movesHistory.clear();
+	inNullMoveSearch = 0;
+	for (uint8_t i = 0; i < 128; i++) {
+		killers[i][0] = killers[i][1] = nullMove;
+	}
 }
 
 void AI::updateHistoryNewSearch() {
