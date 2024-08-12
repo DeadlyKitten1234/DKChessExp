@@ -77,6 +77,20 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	}
 	return eval;
 }
+
+/*
+	Search scheme:
+	if depth = 0 ? qsearch
+	update legal moves
+	futility pruning
+	null move pruning
+	lookup in tt
+	search moves {
+		reverse futility pruning
+		search children
+	}
+	write in tt
+*/
 template<bool root>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (Clock::now() >= searchEndTime) {
@@ -85,56 +99,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth <= 0) {
 		return searchOnlyCaptures(alpha, beta);
 	}
-
-	//Fail low means no move gives a score > alpha
-	//Starts with 1 and is set to 0 if a score > alpha is achieved
-	bool failLow = 1;
-	bool foundTTEntry = 0;
-	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
-
-	int16_t eval = pos->evaluate();
-	int16_t bestValue = -pieceValue[KING];
-
-	int16_t curBestMove = nullMove;
-	int16_t ttBestMove = (foundTTEntry ? ttEntryRes->bestMove : nullMove);
-	if (foundTTEntry && ttEntryRes->depth >= depth) {
-		//Renew gen (make it more valuable when deciding which entry to overwrite)
-		ttEntryRes->setGen(tt.gen);
-		//Lower bound
-		if (ttEntryRes->boundType() == BoundType::LowBound) {
-			if (ttEntryRes->eval > alpha || ttEntryRes->eval >= beta) {
-				if constexpr (root) {
-					bestMove = ttEntryRes->bestMove;
-				}
-				curBestMove = ttEntryRes->bestMove;
-				failLow = 0;
-			}
-			if (ttEntryRes->eval >= beta) {
-				return ttEntryRes->eval;
-			}
-			alpha = max(alpha, ttEntryRes->eval);
-			eval = max(eval, ttEntryRes->eval);
-		}
-		//Higher bound
-		if (ttEntryRes->boundType() == BoundType::HighBound) {
-			//We have guaranteed a better position
-			if (ttEntryRes->eval <= alpha) {
-				return alpha;
-			}
-		}
-		//If exact bound => return eval
-		if (ttEntryRes->boundType() == BoundType::Exact) {
-			if constexpr (root) {
-				bestMove = ttEntryRes->bestMove;
-			}
-			return ttEntryRes->eval;
-		}
-	}
-	if (depth == 1 && eval + pieceValue[QUEEN] + 2 * pieceValue[PAWN] <= alpha) {
-		return alpha;
-	}
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
+
+	int16_t eval = pos->evaluate();
 
 	int16_t moves[256];
 	pos->updateLegalMoves<0>(moves);
@@ -204,6 +172,49 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					return verification;
 				}
 			}
+		}
+	}
+
+	//Fail low means no move gives a score > alpha
+	//Starts with 1 and is set to 0 if a score > alpha is achieved
+	bool failLow = 1;
+	bool foundTTEntry = 0;
+	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
+	int16_t bestValue = -pieceValue[KING];
+
+	int16_t curBestMove = nullMove;
+	int16_t ttBestMove = (foundTTEntry ? ttEntryRes->bestMove : nullMove);
+	if (foundTTEntry && ttEntryRes->depth >= depth) {
+		//Renew gen (make it more valuable when deciding which entry to overwrite)
+		ttEntryRes->setGen(tt.gen);
+		//Lower bound
+		if (ttEntryRes->boundType() == BoundType::LowBound) {
+			if (ttEntryRes->eval > alpha || ttEntryRes->eval >= beta) {
+				if constexpr (root) {
+					bestMove = ttEntryRes->bestMove;
+				}
+				curBestMove = ttEntryRes->bestMove;
+				failLow = 0;
+			}
+			if (ttEntryRes->eval >= beta) {
+				return ttEntryRes->eval;
+			}
+			alpha = max(alpha, ttEntryRes->eval);
+			eval = max(eval, ttEntryRes->eval);
+		}
+		//Higher bound
+		if (ttEntryRes->boundType() == BoundType::HighBound) {
+			//We have guaranteed a better position
+			if (ttEntryRes->eval <= alpha) {
+				return alpha;
+			}
+		}
+		//If exact bound => return eval
+		if (ttEntryRes->boundType() == BoundType::Exact) {
+			if constexpr (root) {
+				bestMove = ttEntryRes->bestMove;
+			}
+			return ttEntryRes->eval;
 		}
 	}
 
@@ -339,6 +350,34 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1;
 
+	int16_t moves[256];
+	pos->updateLegalMoves<1>(moves);
+	const int16_t movesCnt = pos->m_legalMovesCnt;
+	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
+	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
+	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
+	if (!pos->friendlyInCheck && !inNullMoveSearch) {
+		//Make null move
+		pos->makeNullMove();
+		movesHistory.push(nullMove);
+		inNullMoveSearch++;
+		//Search
+		int16_t nullRes = -searchOnlyCaptures(-beta, -beta + 1);
+		//Undo null move
+		pos->undoNullMove(possibleEnPassant);
+		movesHistory.pop();
+		inNullMoveSearch--;
+		//Prune
+		if (nullRes >= beta) {
+			//Increment to not allow null move pruning in verification search
+			inNullMoveSearch++;
+			int16_t verification = searchOnlyCaptures(beta, beta + 1);
+			inNullMoveSearch--;
+			if (verification >= beta) {
+				return verification;
+			}
+		}
+	}
 	//Check tt
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
@@ -369,32 +408,6 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		alpha = staticEval;
 		failLow = 0;
 	}
-
-	int16_t moves[256];
-	pos->updateLegalMoves<1>(moves);
-	const int16_t movesCnt = pos->m_legalMovesCnt;
-	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
-	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
-	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
-	if (!pos->friendlyInCheck && !inNullMoveSearch) {
-		//Make null move
-		pos->makeNullMove();
-		movesHistory.push(nullMove);
-		inNullMoveSearch++;
-		//Search
-		int16_t nullRes = -searchOnlyCaptures(-beta, -beta + 1);
-		//Undo null move
-		pos->undoNullMove(possibleEnPassant);
-		movesHistory.pop();
-		inNullMoveSearch--;
-		//Prune
-		if (nullRes >= beta) {
-			int16_t verification = searchOnlyCaptures(beta, beta + 1);
-			if (verification >= beta) {
-				return verification;
-			}
-		}
-	}
 	
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove), nullMove);
@@ -417,7 +430,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			//Promotion
 			maxIncrease += pieceValue[getPromotionPiece(curMove)];
 		}
-		if (staticEval + maxIncrease + (2 * pieceValue[PAWN])/*safety margin*/ <= alpha) {
+		if (staticEval + maxIncrease + pieceValue[PAWN]/*safety margin*/ <= alpha) {
 			continue;
 		}
 
