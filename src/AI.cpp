@@ -34,12 +34,7 @@ int16_t AI::startSearch(uint64_t timeToSearch) {
 	searchEndTime = Clock::now() + timeToSearch;
 	//Reset killers
 	for (uint8_t i = 0; i < 128; i++) {
-		if (i == 127) {
-			killers[i][0] = killers[i + 1][0] = nullMove;
-		} else {
-			killers[i][0] = killers[i + 1][0];
-			killers[i][1] = killers[i + 1][1];
-		}
+		killers[i][0] = killers[i + 1][0] = nullMove;
 	}
 	tt.newGen();
 	return iterativeDeepening(127);
