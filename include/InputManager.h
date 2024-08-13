@@ -17,7 +17,7 @@ public:
 	bool m_keyReleased;
 	bool m_quit;
 
-	char keyPressed;//WORKS ONLY IN THE CHESS BOT; DO NOT COPY
+	char keyPressed;
 
 	void getInput();
 };

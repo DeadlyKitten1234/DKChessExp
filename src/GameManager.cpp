@@ -10,10 +10,9 @@ GameManager::~GameManager() {
 
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
-		m_ai.startSearch(500);
+		m_ai.startSearch(1000);
 		m_pos->makeMove(m_ai.bestMove);
 		m_pos->updateLegalMoves<0>();
-		tt.newGen();
 		return;
 	}
 
@@ -23,6 +22,9 @@ void GameManager::update(const InputManager& input) {
 		if (input.m_mouseUp) {
 			int16_t res = m_board.dropPiece(input.m_mouseCoord);
 			PieceType promotionType = getTypeFromChar(input.keyPressed);
+			if (promotionType == PAWN || promotionType == KING) {
+				promotionType = UNDEF;
+			}
 			if (res != nullMove) {
 				if (m_pos->m_pieceOnTile[getStartPos(res)]->type == PieceType::PAWN) {
 					if (getY(getEndPos(res)) == (m_pos->m_blackToMove ? 0 : 7)) {
@@ -33,6 +35,9 @@ void GameManager::update(const InputManager& input) {
 				m_pos->updateLegalMoves<0>();
 			}
 		}
+	}
+	if (input.keyPressed == 'f') {
+		m_board.flip();
 	}
 }
 

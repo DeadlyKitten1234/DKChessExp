@@ -15,13 +15,21 @@ public:
 	void init();
 	void initPos(Position* pos);
 	void draw(int2 mouseCoords);
+	inline void flip() {
+		if (SDL_GetTicks64() > flipAvalableTime) {
+			flipped = !flipped;
+			flipAvalableTime = SDL_GetTicks64() + 500;
+		}	
+	};
 
 	void selectPiece(int2 mouseCoords);
 	int16_t dropPiece(int2 mouseCoords);//Returns move if legal
 
 	static SDL_Texture* m_possibleMoveTexture;
 	static SDL_Texture* m_captureTexture;
-
+private:
+	int64_t flipAvalableTime;
+	bool flipped;
 	Drawable** m_tile;
 	bool m_draggingSelectedPiece;
 	int16_t* m_legalMoveTile;

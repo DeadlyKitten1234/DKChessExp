@@ -51,8 +51,9 @@ void InputManager::getInput() {
         }
     
     }
-    if (curKeyStates[SDL_SCANCODE_B]) { keyPressed = 'b'; }
-    if (curKeyStates[SDL_SCANCODE_R]) { keyPressed = 'r'; }
-    if (curKeyStates[SDL_SCANCODE_K] || curKeyStates[SDL_SCANCODE_N]) { keyPressed = 'n'; }
-    if (curKeyStates[SDL_SCANCODE_Q]) { keyPressed = 'q'; }
+    for (int i = SDL_SCANCODE_A; i <= SDL_SCANCODE_Z; i++) {
+        if (curKeyStates[i]) {
+            keyPressed = 'a' + i - SDL_SCANCODE_A;
+        }
+    }
 }

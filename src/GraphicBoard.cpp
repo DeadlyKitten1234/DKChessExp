@@ -14,6 +14,8 @@ GraphicBoard::GraphicBoard() {
 	m_pos = nullptr;
 	m_selectedPiecePos = -1;
 	m_draggingSelectedPiece = 0;
+	flipAvalableTime = 0;
+	flipped = 0;
 }
 
 GraphicBoard::~GraphicBoard() {}
@@ -45,7 +47,7 @@ void GraphicBoard::init() {
 	}
 }
 
-void GraphicBoard::initPos(Position*  pos) {
+void GraphicBoard::initPos(Position* pos) {
 	m_pos = pos;
 }
 
@@ -54,13 +56,17 @@ void GraphicBoard::draw(int2 mouseCoords) {
 		for (int j = 0; j < 8; j++) {
 			Presenter::drawObject(m_tile[i][j]);
 			if (m_legalMoveTile[(i << 3) + j] != 0) {
+				Drawable* drawTile = &m_tile[i][j];
+				if (flipped) {
+					drawTile = &m_tile[7 - i][7 - j];
+				}
 				//Capture or en passant
 				if (m_pos->m_pieceOnTile[(i << 3) + j] != nullptr || 
 					(m_pos->m_pieceOnTile[m_selectedPiecePos]->type == PAWN && i * 8 + j == m_pos->m_possibleEnPassant)) {
 					
-					Presenter::drawObject(m_captureTexture, m_tile[i][j].m_rect);
+					Presenter::drawObject(m_captureTexture, drawTile->m_rect);
 				} else {
-					Presenter::drawObject(m_possibleMoveTexture, m_tile[i][j].m_rect);
+					Presenter::drawObject(m_possibleMoveTexture, drawTile->m_rect);
 				}
 			}
 		}
@@ -71,8 +77,11 @@ void GraphicBoard::draw(int2 mouseCoords) {
 		if (m_selectedPiecePos == m_pos->m_whitePiece[i]->pos && m_draggingSelectedPiece) {
 			continue;
 		}
-		pieceRect.x = (Presenter::m_SCREEN_WIDTH - m_boardSizePx) / 2 + tileSz * m_pos->m_whitePiece[i]->x;
-		pieceRect.y = (Presenter::m_SCREEN_HEIGHT + m_boardSizePx) / 2 - tileSz * (m_pos->m_whitePiece[i]->y + 1);
+		pieceRect.x =	(Presenter::m_SCREEN_WIDTH - m_boardSizePx) / 2 + 
+						tileSz * (flipped ? 7 - m_pos->m_whitePiece[i]->x : m_pos->m_whitePiece[i]->x);
+
+		pieceRect.y =	(Presenter::m_SCREEN_HEIGHT + m_boardSizePx) / 2 - 
+						tileSz * (flipped ? 7 - m_pos->m_whitePiece[i]->y + 1 : m_pos->m_whitePiece[i]->y + 1);
 		Presenter::drawPiece(m_pos->m_whitePiece[i]->type, pieceRect, m_pos->m_whitePiece[i]->black);
 	}
 	for (int i = 0; i < m_pos->m_blackTotalPiecesCnt; i++) {
@@ -80,8 +89,10 @@ void GraphicBoard::draw(int2 mouseCoords) {
 		if (m_selectedPiecePos == m_pos->m_blackPiece[i]->pos && m_draggingSelectedPiece) {
 			continue;
 		}
-		pieceRect.x = (Presenter::m_SCREEN_WIDTH - m_boardSizePx) / 2 + tileSz * m_pos->m_blackPiece[i]->x;
-		pieceRect.y = (Presenter::m_SCREEN_HEIGHT + m_boardSizePx) / 2 - tileSz * (m_pos->m_blackPiece[i]->y + 1);
+		pieceRect.x =	(Presenter::m_SCREEN_WIDTH - m_boardSizePx) / 2 + 
+						tileSz * (flipped ? 7 - m_pos->m_blackPiece[i]->x : m_pos->m_blackPiece[i]->x);
+		pieceRect.y =	(Presenter::m_SCREEN_HEIGHT + m_boardSizePx) / 2 - 
+						tileSz * (flipped ? 7 - m_pos->m_blackPiece[i]->y + 1 : m_pos->m_blackPiece[i]->y + 1);
 		Presenter::drawPiece(m_pos->m_blackPiece[i]->type, pieceRect, m_pos->m_blackPiece[i]->black);
 	}
 	if (m_selectedPiecePos != -1 && m_draggingSelectedPiece) {
@@ -100,6 +111,10 @@ void GraphicBoard::selectPiece(int2 mouseCoords) {
 		if (boardStY + tileSz >= mouseCoords.y && mouseCoords.y >= boardStY + tileSz - m_boardSizePx) {
 			int tileX = (mouseCoords.x - boardStX) / tileSz;
 			int tileY = (boardStY + tileSz - mouseCoords.y) / tileSz;
+			if (flipped) {
+				tileX = 7 - tileX;
+				tileY = 7 - tileY;
+			}
 			//Piece on tile exists and is the correct color
 			if (m_pos->m_pieceOnTile[tileX + 8 * tileY] != nullptr && m_pos->m_pieceOnTile[tileX + 8 * tileY]->black == m_pos->m_blackToMove) {
 				m_selectedPiecePos = tileX + 8 * tileY;
@@ -127,6 +142,10 @@ int16_t GraphicBoard::dropPiece(int2 mouseCoords) {
 		if (boardStY + tileSz >= mouseCoords.y && mouseCoords.y >= boardStY + tileSz - m_boardSizePx) {
 			int tileX = (mouseCoords.x - boardStX) / tileSz;
 			int tileY = (boardStY + tileSz - mouseCoords.y) / tileSz;
+			if (flipped) {
+				tileX = 7 - tileX;
+				tileY = 7 - tileY;
+			}
 			if (m_legalMoveTile[tileX + 8 * tileY]) {
 				int16_t ans = createMove(m_selectedPiecePos, tileX + 8 * tileY);
 				//Reset selection and update legal moves
