@@ -146,16 +146,15 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 	}
 
-	int16_t bestMoveAfterNull = nullMove;
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
-	if (!pvNode && !root && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate) {
-
-		const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
+	int16_t bestMoveAfterNull = nullMove;
+	const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
+	if (!pvNode && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate && eval >= beta) {
 		//Don't chain a lot of null moves, but if last was null and in 
 		//only one null move search, do null movee to detect zugzwang
 		if (inNullMoveSearch == lastWasNull) {
-			//Depth reduction formula taken from stockfish
-			int8_t depthReduction = std::min(int(eval - beta) / 400, 6) + 4 + depth / 3;
+			//Depth reduction formula taken from stockfish and changed a little
+			int8_t depthReduction = std::clamp(int(eval - beta) / pieceValue[PAWN], 0, 5) + 4 + depth / 3;
 			if (lastWasNull) {
 				//If last was null check another null move to detect zugzwang without reducing depth
 				depthReduction = 0;
@@ -181,7 +180,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				if (depth <= 8) {
 					return nullRes;
 				}
+				//Don't do null moves in verification search
+				inNullMoveSearch += 2;
 				int16_t verification = search<NonPV>(depth - depthReduction, beta - 1, beta);
+				inNullMoveSearch -= 2;
 				if (verification >= beta) {
 					return verification;
 				}
@@ -270,17 +272,17 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		const int16_t curMove = moves[moveIndices[i]];
 		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
 		if (depth <= 2) {
-			int16_t maxIncrese = 0;
+			int16_t evalIncrease = 0;
 			if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
-				maxIncrese += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
+				evalIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
 			}
 			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
-				maxIncrese += pieceValue[getPromotionPiece(curMove)];
+				evalIncrease += pieceValue[getPromotionPiece(curMove)];
 			}
-			if (depth == 2 && eval + maxIncrese - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
-				return eval + maxIncrese - pieceValue[QUEEN] - 2 * pieceValue[PAWN];
+			if (depth == 2 && eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
+				return eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN];
 			}
-			if (depth == 1 && eval + maxIncrese + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
+			if (depth == 1 && eval + evalIncrease + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
 				break;
 			}
 		}
