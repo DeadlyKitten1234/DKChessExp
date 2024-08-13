@@ -8,6 +8,17 @@
 #include <algorithm>
 using std::max;
 using std::min;
+
+enum NodeType : int8_t {
+	//PV (principal variation(i think)) nodes are the 
+	//nodes that are hit when players do the best moves
+	PV = 0,
+	//NonPv nodes can be cut-nodes (where alpha beta cutoff occured)
+	//or all-nodes (where no score improved alpha)
+	NonPV = 1,
+	Root = 2
+};
+
 class AI {
 public:
 	AI();
@@ -24,7 +35,7 @@ private:
 	Position* pos;
 
 	int16_t iterativeDeepening(int8_t depth);
-	template<bool root = 1>
+	template<NodeType nodeType>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 	inline void orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull);
@@ -60,7 +71,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
-		int16_t curEval = search(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+		int16_t curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
 
 		if (Clock::now() >= searchEndTime) {
 			std::cout << "Search ended { Eval: " << eval << "; Best move: ";
@@ -91,7 +102,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	}
 	write in tt
 */
-template<bool root>
+template<NodeType nodeType>
 inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (Clock::now() >= searchEndTime) {
 		return 0;
@@ -99,6 +110,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (depth <= 0) {
 		return searchOnlyCaptures(alpha, beta);
 	}
+	constexpr bool root = (nodeType == Root);
+	constexpr bool pvNode = (nodeType != NonPV);
+
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 
@@ -113,11 +127,17 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
+	const bool abCloseToMate =	abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
+								abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
+	//Razoring
+	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] <= alpha && 
+		(pos->m_blackToMove ? pos->m_whiteTotalPiecesCnt : pos->m_blackTotalPiecesCnt) >= 3) {
+
+		depth--;
+	}
 
 	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
-	if (!pos->friendlyInCheck && depth <= 8 &&
-		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
-		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
+	if (!pvNode && !pos->friendlyInCheck && depth <= 8 && !abCloseToMate) {
 		if (eval - pieceValue[BISHOP] * depth / 2 - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
 			return eval - pieceValue[BISHOP] * depth / 2 - 2 * pieceValue[PAWN];
 		}
@@ -128,9 +148,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	int16_t bestMoveAfterNull = nullMove;
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
-	if (!root && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) &&
-		abs((abs(alpha) - pieceValue[KING])) > MAX_PLY_MATE &&
-		abs((abs(beta) - pieceValue[KING])) > MAX_PLY_MATE) {
+	if (!pvNode && !root && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate) {
 
 		const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
 		//Don't chain a lot of null moves, but if last was null and in 
@@ -147,7 +165,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			movesHistory.push(nullMove);
 			inNullMoveSearch++;
 			//Search
-			int16_t nullRes = -search<0>(depth - depthReduction, -beta, -beta + 1);
+			int16_t nullRes = -search<NonPV>(depth - depthReduction, -beta, -beta + 1);
 			//Get best move after null move
 			bool foundNullMoveTTE = 0;
 			TTEntry* nullMoveTTE = tt.find(pos->zHash, foundNullMoveTTE);
@@ -163,11 +181,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				if (depth <= 8) {
 					return nullRes;
 				}
-
-				//Don't allow null move searches in verification search
-				inNullMoveSearch += 2;
-				int16_t verification = search<0>(depth - depthReduction, beta - 1, beta);
-				inNullMoveSearch -= 2;
+				int16_t verification = search<NonPV>(depth - depthReduction, beta - 1, beta);
 				if (verification >= beta) {
 					return verification;
 				}
@@ -190,7 +204,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		//Lower bound
 		if (ttEntryRes->boundType() == BoundType::LowBound) {
 			if (ttEntryRes->eval > alpha || ttEntryRes->eval >= beta) {
-				if constexpr (root) {
+				if (root) {
 					bestMove = ttEntryRes->bestMove;
 				}
 				curBestMove = ttEntryRes->bestMove;
@@ -211,7 +225,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		//If exact bound => return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
-			if constexpr (root) {
+			if (root) {
 				bestMove = ttEntryRes->bestMove;
 			}
 			return ttEntryRes->eval;
@@ -220,7 +234,34 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
+	//Prob cut
+	const int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
+	constexpr int8_t probCutDepthR = 4;
+	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
+		for (int16_t i = 0; i < movesCnt; i++) {
+			if (i != movesCnt - 1) {
+				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+			}
+			const int16_t curMove = moves[moveIndices[i]];
+			//Make move
+			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
+			movesHistory.push(curMove);
+			//Search
+			int16_t res = -searchOnlyCaptures(-probCutBeta, -probCutBeta + 1);
+			if (res >= probCutBeta) {
+				res = -search<NonPV>(depth - probCutDepthR, -probCutBeta, -probCutBeta + 1);
+			}
+			//Undo move
+			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+			movesHistory.pop();
+			if (res >= probCutBeta) {
+				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
+				return res;
+			}
+		}
+	}
 
+	//Search moves
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move in tt
 		if (i != movesCnt - 1) {
@@ -236,8 +277,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
 				maxIncrese += pieceValue[getPromotionPiece(curMove)];
 			}
-			if (depth == 2 && eval - maxIncrese - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
-				return eval - maxIncrese - 2 * pieceValue[PAWN];
+			if (depth == 2 && eval + maxIncrese - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
+				return eval + maxIncrese - pieceValue[QUEEN] - 2 * pieceValue[PAWN];
 			}
 			if (depth == 1 && eval + maxIncrese + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
 				break;
@@ -251,14 +292,14 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		//Search
 		int16_t res = 0;
 		if (i == 0 || depth <= 2) {
-			res = -search<0>(depth - 1, -beta, -alpha);
+			res = -search<(pvNode ? PV : NonPV)>(depth - 1, -beta, -alpha);
 		} else {
 			//Perform zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
-			res = -search<0>(depth - 1, -alpha - 1, -alpha);
-			if (res > alpha && beta - alpha > 1) {
-				res = -search<0>(depth - 1, -beta, -alpha);
+			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
+			if (res > alpha && res < beta && beta - alpha > 1) {
+				res = -search<(pvNode ? PV : NonPV)>(depth - 1, -beta, -res);
 			}
 		}
 
@@ -277,7 +318,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		//Alpha-beta cutoff
 		if (res >= beta) {
 			ttEntryRes->init(pos->zHash, curMove, res, depth, tt.gen, BoundType::LowBound);
-			if constexpr (root) {
+			if (root) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
 			}
@@ -304,7 +345,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		//Best move
 		if (res > bestValue) {
-			if constexpr (root) {
+			if (root) {
 				bestMove = curMove;
 			}
 			curBestMove = curMove;
@@ -315,7 +356,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			}
 		}
 	}
-	if constexpr (root) {
+	if (root) {
 		pos->m_legalMovesCnt = movesCnt;
 	}
 	//No alpha-beta cutoff occured
