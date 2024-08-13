@@ -14,6 +14,7 @@ AI::AI() {
 	movesHistory.init(256);
 	searchEndTime = 0;
 	inNullMoveSearch = 0;
+	inScout = 0;
 }
 
 AI::~AI() {
@@ -52,6 +53,7 @@ void AI::resetHistory() {
 	}
 	movesHistory.clear();
 	inNullMoveSearch = 0;
+	inScout = 0;
 	for (uint8_t i = 0; i < 128; i++) {
 		killers[i][0] = killers[i][1] = nullMove;
 	}
@@ -67,5 +69,6 @@ void AI::updateHistoryNewSearch() {
 		}
 	}
 	movesHistory.clear();
+	inScout = 0;
 	inNullMoveSearch = 0;
 }

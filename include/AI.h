@@ -48,6 +48,8 @@ private:
 	Stack<int16_t> movesHistory;
 	static const int CHECK_BONUS;
 
+	int inScout;
+
 	//<https://www.chessprogramming.org/History_Heuristic>
 	int historyHeuristic[2][6][64];
 	static const int MAX_HISTORY;
@@ -299,7 +301,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//Perform zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
+			inScout++;
 			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
+			inScout--;
 			if (res > alpha && res < beta && beta - alpha > 1) {
 				res = -search<(pvNode ? PV : NonPV)>(depth - 1, -beta, -res);
 			}
@@ -311,6 +315,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		if (Clock::now() >= searchEndTime) {
 			return 0;
+		}
+
+		if (inScout && i > 7 && pos->m_pieceOnTile[getEndPos(curMove)] == nullptr) {
+			return alpha;
 		}
 
 		//If mate ? decrease value with depth
