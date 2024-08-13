@@ -26,8 +26,11 @@ public:
 	void updateLegalMoves(int16_t out[256]);
 	inline int16_t evaluate();
 
-	inline bool hasNonPawnPiece(bool black) {
-		return (black ? m_blackPiecesCnt[PAWN] != m_blackTotalPiecesCnt  - 1: m_whitePiecesCnt[PAWN] != m_whiteTotalPiecesCnt - 1);
+	inline bool hasNonPawnPiece(bool black) const {
+		return (black ? m_blackPiecesCnt[PAWN] != m_blackTotalPiecesCnt - 1 : m_whitePiecesCnt[PAWN] != m_whiteTotalPiecesCnt - 1);
+	}
+	inline int8_t nonPawnPcsCnt(bool black) const {
+		return (black ? m_blackTotalPiecesCnt - 1 - m_blackPiecesCnt[PAWN] : m_whiteTotalPiecesCnt - 1 - m_whitePiecesCnt[PAWN]);
 	}
 
 	static const char* m_startFEN;
