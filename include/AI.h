@@ -143,14 +143,14 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
-	if (!pvNode && !pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
-		if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
-			return eval - pieceValue[BISHOP] * depth / 2;
-		}
-		if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
-			return alpha;
-		}
-	}
+	//if (!pvNode && !pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
+	//	if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
+	//		return eval - pieceValue[BISHOP] * depth / 2;
+	//	}
+	//	if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
+	//		return alpha;
+	//	}
+	//}
 
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
 	int16_t bestMoveAfterNull = nullMove;
@@ -245,8 +245,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 3;
 	if (inScout || inNullMoveSearch && !abCloseToMate && !(foundTTEntry && ttEntryRes->depth >= depth - multiCutDepthR)) {
-		int16_t movesToSearch = min<int16_t>(8, movesCnt);
-		int16_t cutNodesToQuit = 2;
+		int16_t movesToSearch = min<int16_t>(12, movesCnt);
+		int16_t cutNodesToQuit = 3;
 		int16_t curCutNodes = 0;
 		for (int8_t i = 0; i < movesToSearch; i++) {
 			if (i != movesCnt - 1) {
@@ -339,7 +339,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			inScout++;
 			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
 			inScout--;
-			if (res > alpha && res < beta && pvNode) {
+			if (res > alpha && res < beta && beta - alpha > 1) {
 				res = -search<PV>(depth - 1, -beta, -res);
 			}
 		}
@@ -397,8 +397,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			}
 		}
 		//Uncertainty cutoffs
-		if (((inScout && i > 6) || (inNullMoveSearch <= 2 && i > 8)) && 
-			(pos->m_pieceOnTile[getEndPos(curMove)] == nullptr || !givesCheck(curMove))) {
+		if (((inScout && i > 6)) && (pos->m_pieceOnTile[getEndPos(curMove)] == nullptr || !givesCheck(curMove))) {
 
 			return alpha;
 		}
@@ -567,10 +566,10 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			curBestMove = curMove;
 		}
 		//Uncertainty cutoffs
-		if ((inScout && i > 2) || (inNullMoveSearch <= 2 && i > 4)) {
+		//if ((inScout && i > 2)) {
 
-			return alpha;
-		}
+		//	return alpha;
+		//}
 	}
 	//Don't replace ttEntry with garbage one useful only for qsearch
 	if (!foundTTEntry || 
