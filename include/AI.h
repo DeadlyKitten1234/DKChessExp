@@ -245,8 +245,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 3;
 	if (inScout || inNullMoveSearch && !abCloseToMate && !(foundTTEntry && ttEntryRes->depth >= depth - multiCutDepthR)) {
-		int16_t movesToSearch = min<int16_t>(12, movesCnt);
-		int16_t cutNodesToQuit = 3;
+		int16_t movesToSearch = min<int16_t>(8, movesCnt);
+		int16_t cutNodesToQuit = 2;
 		int16_t curCutNodes = 0;
 		for (int8_t i = 0; i < movesToSearch; i++) {
 			if (i != movesCnt - 1) {
