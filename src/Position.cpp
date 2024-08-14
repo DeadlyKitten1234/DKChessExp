@@ -199,7 +199,7 @@ void Position::readFEN(const char* fen) {
 	//Set zobrist hash; Do it here for the same reason as setting indices
 	zHash = getPositionHash(*this);
 	//Set legal moves
-	updateLegalMoves<0>(this->m_legalMoves);
+	updateLegalMoves<0>(this->m_legalMoves, true);
 }
 
 uint64_t Position::getZHashIfMoveMade(const int16_t move) const {

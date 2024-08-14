@@ -121,7 +121,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	int16_t eval = pos->evaluate();
 
 	int16_t moves[256];
-	pos->updateLegalMoves<0>(moves);
+	pos->updateLegalMoves<0>(moves, true);
 	int16_t movesCnt = pos->m_legalMovesCnt;
 	if (movesCnt == 0) {
 		if (pos->friendlyInCheck) {
@@ -132,18 +132,18 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	const bool abCloseToMate =	abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
 								abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
 	//Razoring
-	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] <= alpha && 
+	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] * 2  + pvNode * 35 <= alpha &&
 		(pos->m_blackToMove ? pos->m_whiteTotalPiecesCnt : pos->m_blackTotalPiecesCnt) >= 3) {
 
 		depth--;
 	}
 
 	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
-	if (!pvNode && !pos->friendlyInCheck && depth <= 8 && !abCloseToMate) {
-		if (eval - pieceValue[BISHOP] * depth / 2 - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
-			return eval - pieceValue[BISHOP] * depth / 2 - 2 * pieceValue[PAWN];
+	if (!pvNode && !pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
+		if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
+			return eval - pieceValue[BISHOP] * depth / 2;
 		}
-		if (eval + pieceValue[BISHOP] * depth / 2 + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
+		if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
 			return alpha;
 		}
 	}
@@ -317,10 +317,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			return 0;
 		}
 
-		if (inScout && i > 7 && pos->m_pieceOnTile[getEndPos(curMove)] == nullptr) {
-			return alpha;
-		}
-
 		//If mate ? decrease value with depth
 		if (res > pieceValue[KING] - MAX_PLY_MATE) {
 			res -= 2;
@@ -365,6 +361,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				failLow = 0;
 			}
 		}
+		if ((inScout && i > 6) || (inNullMoveSearch && i > 8) && pos->m_pieceOnTile[getEndPos(curMove)] == nullptr) {
+			return alpha;
+		}
 	}
 	if (root) {
 		pos->m_legalMovesCnt = movesCnt;
@@ -402,7 +401,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	bool failLow = 1;
 
 	int16_t moves[256];
-	pos->updateLegalMoves<1>(moves);
+	pos->updateLegalMoves<1>(moves, true);
 	const int16_t movesCnt = pos->m_legalMovesCnt;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
@@ -543,16 +542,6 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull) {
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
 	const int8_t enemyKingPos = (pos->m_blackToMove ? pos->m_whitePiece[0]->pos : pos->m_blackPiece[0]->pos);
-	uint64_t checksToKing[6] = {
-		0,//King can't check another king
-		0,//Queen will be redundant if evaluated, so after arr init do bitwise | on bishop and rook
-		attacks<BISHOP>	(enemyKingPos, allPcs),
-		attacks<KNIGHT>	(enemyKingPos, allPcs),
-		attacks<ROOK>	(enemyKingPos, allPcs),
-		pawnAtt<!pos->m_blackToMove>(enemyKingPos)
-	};
-	//Queen checks = rook checks | bishop checks
-	checksToKing[QUEEN] = checksToKing[BISHOP] | checksToKing[ROOK];
 
 	int8_t bmAfterNullSt = getStartPos(bestMoveAfterNull);
 	int8_t bmAfterNullEnd = getEndPos(bestMoveAfterNull);
@@ -642,7 +631,7 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 			curGuess += 15 * pieceValue[getPromotionPiece(curMove)];
 		}
 		//Favor checks slightly
-		if (checksToKing[pt] & (1ULL << endPos)) {
+		if (givesCheck(curMove)) {
 			//Add pieceValue[piece to make move] / 32, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
 			curGuess += CHECK_BONUS + (pieceValue[pt] / 32);

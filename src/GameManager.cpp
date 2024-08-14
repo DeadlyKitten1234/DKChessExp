@@ -10,9 +10,9 @@ GameManager::~GameManager() {
 
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
-		m_ai.startSearch(1000);
+		m_ai.startSearch(1200);
 		m_pos->makeMove(m_ai.bestMove);
-		m_pos->updateLegalMoves<0>();
+		m_pos->updateLegalMoves<0>(true);
 		return;
 	}
 
@@ -28,11 +28,11 @@ void GameManager::update(const InputManager& input) {
 			if (res != nullMove) {
 				if (m_pos->m_pieceOnTile[getStartPos(res)]->type == PieceType::PAWN) {
 					if (getY(getEndPos(res)) == (m_pos->m_blackToMove ? 0 : 7)) {
-						res = createMove(getStartPos(res), getEndPos(res), (promotionType == UNDEF ? QUEEN : promotionType));
+						res = createMove(getStartPos(res), getEndPos(res), 0, (promotionType == UNDEF ? QUEEN : promotionType));
 					}
 				}
 				m_pos->makeMove(res);
-				m_pos->updateLegalMoves<0>();
+				m_pos->updateLegalMoves<0>(true);
 			}
 		}
 	}

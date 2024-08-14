@@ -17,7 +17,7 @@ void World::init() {
 	m_backgroundTexture = loadTexture("Background", Presenter::m_mainRenderer);
 	m_gameManager.init();
 
-	m_gameManager.setAI(0, 1);
+	m_gameManager.setAI(1, 0);
 }
 
 void World::update() {

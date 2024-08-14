@@ -21,20 +21,20 @@
     <Filter Include="_Header Files\AI">
       <UniqueIdentifier>{bc4a4226-7e8c-479e-b64d-f6fafbacd781}</UniqueIdentifier>
     </Filter>
-    <Filter Include="_Source Files">
+    <Filter Include="Board\_Source Files">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="_Source Files\AI">
+    <Filter Include="Board\_Source Files\AI">
       <UniqueIdentifier>{8ce31279-d04d-4312-be7a-928e1f647ca2}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\main.cpp">
-      <Filter>_Source Files</Filter>
+      <Filter>Board\_Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\AI.cpp">
-      <Filter>_Source Files\AI</Filter>
+      <Filter>Board\_Source Files\AI</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Piece.cpp">
       <Filter>Board</Filter>
@@ -64,7 +64,7 @@
       <Filter>UI and Input</Filter>
     </ClCompile>
     <ClCompile Include="..\src\TranspositionTable.cpp">
-      <Filter>_Source Files\AI</Filter>
+      <Filter>Board\_Source Files\AI</Filter>
     </ClCompile>
     <ClCompile Include="..\src\Globals.cpp">
       <Filter>UI and Input</Filter>

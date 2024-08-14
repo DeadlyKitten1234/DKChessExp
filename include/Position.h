@@ -21,9 +21,9 @@ public:
 	void undoNullMove(int8_t possibleEnPassant_);
 
 	template<bool capturesOnly>
-	void updateLegalMoves();
+	void updateLegalMoves(const bool calculateChecks = 0);
 	template<bool capturesOnly>
-	void updateLegalMoves(int16_t out[256]);
+	void updateLegalMoves(int16_t out[256], const bool calculateChecks = 0);
 	inline int16_t evaluate();
 
 	inline bool hasNonPawnPiece(bool black) const {
@@ -134,13 +134,13 @@ inline void Position::updateDynamicVars(const PieceType type, const int8_t stTil
 }
 
 template<bool capturesOnly>
-inline void Position::updateLegalMoves() {
-	updateLegalMoves<capturesOnly>(this->m_legalMoves);
+inline void Position::updateLegalMoves(const bool calculateChecks) {
+	updateLegalMoves<capturesOnly>(this->m_legalMoves, calculateChecks);
 }
 
 template<bool capturesOnly>
-void Position::updateLegalMoves(int16_t out[256]) {
-	m_legalMovesCnt = generateMoves<capturesOnly>(*this, out);
+void Position::updateLegalMoves(int16_t out[256], const bool calculateChecks) {
+	m_legalMovesCnt = generateMoves<capturesOnly>(*this, out, calculateChecks);
 	friendlyInCheck = inCheck;//inCheck is declared in MoveGenerator.h
 	enemyPawnAttacksBitmask = pawnAtt;//pawnAtt declared in MoveGenerator.h
 }

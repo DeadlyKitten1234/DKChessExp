@@ -40,6 +40,9 @@ TODO:
     .<https://www.chessprogramming.org/Search>
     .all links in <https://www.chessprogramming.org/Evaluation>
 
+    .<https://www.chessprogramming.org/Multi-Cut>
+    .<https://www.chessprogramming.org/Uncertainty_Cut-Offs>
+
     .<https://www.chessprogramming.org/ProbCut>
 
     .<https://www.chessprogramming.org/Lazy_Evaluation>

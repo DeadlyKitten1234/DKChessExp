@@ -25,6 +25,8 @@ void GraphicBoard::init() {
 	SDL_Texture* BlackTile = loadTexture("BlackTile", Presenter::m_mainRenderer);
 	m_possibleMoveTexture = loadTexture("PossibleMove", Presenter::m_mainRenderer);
 	m_captureTexture = loadTexture("CaptureMove", Presenter::m_mainRenderer);
+	SDL_SetTextureAlphaMod(m_possibleMoveTexture, 50);
+	SDL_SetTextureColorMod(m_possibleMoveTexture, 0, 0, 0);
 	m_legalMoveTile = new int16_t[64]();
 	m_tile = new Drawable*[8]();
 	int tileSz = m_boardSizePx / 8;
@@ -55,18 +57,31 @@ void GraphicBoard::draw(int2 mouseCoords) {
 	for (int i = 0; i < 8; i++) {
 		for (int j = 0; j < 8; j++) {
 			Presenter::drawObject(m_tile[i][j]);
-			if (m_legalMoveTile[(i << 3) + j] != 0) {
+			if (m_legalMoveTile[(i * 8) + j] != 0) {
 				Drawable* drawTile = &m_tile[i][j];
 				if (flipped) {
 					drawTile = &m_tile[7 - i][7 - j];
 				}
 				//Capture or en passant
-				if (m_pos->m_pieceOnTile[(i << 3) + j] != nullptr || 
+				if (m_pos->m_pieceOnTile[(i * 8) + j] != nullptr || 
 					(m_pos->m_pieceOnTile[m_selectedPiecePos]->type == PAWN && i * 8 + j == m_pos->m_possibleEnPassant)) {
-					
+					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
+						SDL_SetTextureColorMod(m_captureTexture, 255, 0, 0);
+					}
 					Presenter::drawObject(m_captureTexture, drawTile->m_rect);
+					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
+						SDL_SetTextureColorMod(m_captureTexture, 255, 255, 255);
+					}
 				} else {
-					Presenter::drawObject(m_possibleMoveTexture, drawTile->m_rect);
+					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
+						SDL_SetTextureColorMod(m_captureTexture, 255, 0, 0);
+						SDL_SetTextureAlphaMod(m_captureTexture, 180);
+						Presenter::drawObject(m_captureTexture, drawTile->m_rect);
+						SDL_SetTextureAlphaMod(m_captureTexture, 255);
+						SDL_SetTextureColorMod(m_captureTexture, 255, 255, 255);
+					} else {
+						Presenter::drawObject(m_possibleMoveTexture, drawTile->m_rect);
+					}
 				}
 			}
 		}
@@ -147,7 +162,7 @@ int16_t GraphicBoard::dropPiece(int2 mouseCoords) {
 				tileY = 7 - tileY;
 			}
 			if (m_legalMoveTile[tileX + 8 * tileY]) {
-				int16_t ans = createMove(m_selectedPiecePos, tileX + 8 * tileY);
+				int16_t ans = createMove(m_selectedPiecePos, tileX + 8 * tileY, 0);
 				//Reset selection and update legal moves
 				m_selectedPiecePos = -1;
 				for (int i = 0; i < 64; i++) {

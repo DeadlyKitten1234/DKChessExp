@@ -10,7 +10,7 @@ public:
 	~World();
 
 	void init();
-	void initPos(Position* pos_) { m_gameManager.initPos(pos_); pos_->updateLegalMoves<0>(); };
+	void initPos(Position* pos_) { m_gameManager.initPos(pos_); pos_->updateLegalMoves<0>(true); };
 	void update();
 	void draw();
 
