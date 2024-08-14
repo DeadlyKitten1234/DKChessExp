@@ -261,6 +261,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			if (res >= beta) {
 				res = -search<NonPV>(depth - multiCutDepthR, -beta, -beta + 1);
 			}
+			killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 			//Undo move
 			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
 			movesHistory.pop();
@@ -343,6 +344,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				res = -search<PV>(depth - 1, -beta, -res);
 			}
 		}
+		killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 
 		//Undo move
 		pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
@@ -396,9 +398,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				failLow = 0;
 			}
 		}
-		//Uncertainty cutoffs
-		if (((inScout && i > 6)) && (pos->m_pieceOnTile[getEndPos(curMove)] == nullptr || !givesCheck(curMove))) {
-
+		//Uncertainty cutoffs https://www.chessprogramming.org/Uncertainty_Cut-Offs
+		if ((inScout && i > 6) && (pos->m_pieceOnTile[getEndPos(curMove)] == nullptr || !givesCheck(curMove))) {
 			return alpha;
 		}
 	}
@@ -565,18 +566,16 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			failLow = 0;
 			curBestMove = curMove;
 		}
-		//Uncertainty cutoffs
-		//if ((inScout && i > 2)) {
-
-		//	return alpha;
-		//}
+		//Uncertainty cutoffs https://www.chessprogramming.org/Uncertainty_Cut-Offs
+		if (inScout && i > 2) {
+			return alpha;
+		}
 	}
 	//Don't replace ttEntry with garbage one useful only for qsearch
 	if (!foundTTEntry || 
 		(foundTTEntry && ttEntryRes->depth == 0 && //Unless found a qsearch entry and
 		//we have exact or we have a better high bound
 		(!failLow || (ttEntryRes->boundType() == HighBound && ttEntryRes->eval > alpha)))) {
-		
 		
 		//Here can write high bound if failLow and exact otherwise, because 
 		//it only affect qsearch, because in main search we check if
