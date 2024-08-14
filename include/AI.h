@@ -95,12 +95,14 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	Search scheme:
 	if depth = 0 ? qsearch
 	update legal moves
+	razoring
 	futility pruning
 	null move pruning
 	lookup in tt
 	search moves {
 		reverse futility pruning
 		search children
+		uncertainty cutoffs
 	}
 	write in tt
 */
@@ -183,9 +185,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					return nullRes;
 				}
 				//Don't do null moves in verification search
-				inNullMoveSearch += 2;
+				inNullMoveSearch += 3;
 				int16_t verification = search<NonPV>(depth - depthReduction, beta - 1, beta);
-				inNullMoveSearch -= 2;
+				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					return verification;
 				}
@@ -361,7 +363,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				failLow = 0;
 			}
 		}
-		if ((inScout && i > 6) || (inNullMoveSearch && i > 8) && pos->m_pieceOnTile[getEndPos(curMove)] == nullptr) {
+		//Uncertainty cutoffs
+		if (((inScout && i > 6) || (inNullMoveSearch <= 2 && i > 8)) && 
+			(pos->m_pieceOnTile[getEndPos(curMove)] == nullptr || !givesCheck(curMove))) {
+
 			return alpha;
 		}
 	}
@@ -420,9 +425,9 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		//Prune
 		if (nullRes >= beta) {
 			//Increment to not allow null move pruning in verification search
-			inNullMoveSearch++;
+			inNullMoveSearch += 3;
 			int16_t verification = searchOnlyCaptures(beta, beta + 1);
-			inNullMoveSearch--;
+			inNullMoveSearch -= 3;
 			if (verification >= beta) {
 				return verification;
 			}
@@ -471,16 +476,19 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		const int16_t curMove = moves[moveIndices[i]];
 		//If can't improve alpha, don't search move; This is (i think) delta pruning
 		//https://www.chessprogramming.org/Delta_Pruning
-		int16_t maxIncrease = 0;
+		int16_t evalIncrease = 0;
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
 			//Capture
-			maxIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
+			evalIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
 		}
 		if (getPromotionPiece(curMove) != PieceType::UNDEF) {
 			//Promotion
-			maxIncrease += pieceValue[getPromotionPiece(curMove)];
+			evalIncrease += pieceValue[getPromotionPiece(curMove)];
 		}
-		if (staticEval + maxIncrease + pieceValue[PAWN]/*safety margin*/ <= alpha) {
+		if (staticEval + evalIncrease - pieceValue[QUEEN] - pieceValue[PAWN]/*safety margin*/ >= beta) {
+			return staticEval + evalIncrease - pieceValue[QUEEN] - pieceValue[PAWN];
+		}
+		if (staticEval + evalIncrease + pieceValue[PAWN]/*safety margin*/ <= alpha) {
 			continue;
 		}
 
@@ -495,7 +503,9 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			//Perftorm zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
+			inScout++;
 			res = -searchOnlyCaptures(-alpha - 1, -alpha);
+			inScout--;
 			if (res > alpha && beta - alpha > 1) {
 				res = -searchOnlyCaptures(-beta, -alpha);
 			}
@@ -522,6 +532,11 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			alpha = res;
 			failLow = 0;
 			curBestMove = curMove;
+		}
+		//Uncertainty cutoffs
+		if ((inScout && i > 2) || (inNullMoveSearch <= 2 && i > 4)) {
+
+			return alpha;
 		}
 	}
 	//Don't replace ttEntry with garbage one useful only for qsearch
