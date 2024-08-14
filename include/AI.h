@@ -99,6 +99,8 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	futility pruning
 	null move pruning
 	lookup in tt
+	order moves
+	prob cut
 	search moves {
 		reverse futility pruning
 		search children
@@ -158,17 +160,17 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		//only one null move search, do null movee to detect zugzwang
 		if (inNullMoveSearch == lastWasNull) {
 			//Depth reduction formula taken from stockfish and changed a little
-			int8_t depthReduction = std::clamp(int(eval - beta) / pieceValue[PAWN], 0, 5) + 4 + depth / 3;
+			int8_t nullMoveDepthR = std::clamp(int(eval - beta) / pieceValue[PAWN], 0, 5) + 4 + depth / 3;
 			if (lastWasNull) {
 				//If last was null check another null move to detect zugzwang without reducing depth
-				depthReduction = 0;
+				nullMoveDepthR = 0;
 			}
 			//Make move
 			pos->makeNullMove();
 			movesHistory.push(nullMove);
 			inNullMoveSearch++;
 			//Search
-			int16_t nullRes = -search<NonPV>(depth - depthReduction, -beta, -beta + 1);
+			int16_t nullRes = -search<NonPV>(depth - nullMoveDepthR, -beta, -beta + 1);
 			//Get best move after null move
 			bool foundNullMoveTTE = 0;
 			TTEntry* nullMoveTTE = tt.find(pos->zHash, foundNullMoveTTE);
@@ -186,7 +188,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				}
 				//Don't do null moves in verification search
 				inNullMoveSearch += 3;
-				int16_t verification = search<NonPV>(depth - depthReduction, beta - 1, beta);
+				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta);
 				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					return verification;
@@ -240,7 +242,38 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
-	//Prob cut
+	//Milti cut https://www.chessprogramming.org/Multi-Cut
+	const int8_t multiCutDepthR = depth / 3 + 3;
+	if (inScout || inNullMoveSearch && !abCloseToMate && !(foundTTEntry && ttEntryRes->depth >= depth - multiCutDepthR)) {
+		int16_t movesToSearch = min<int16_t>(12, movesCnt);
+		int16_t cutNodesToQuit = 3;
+		int16_t curCutNodes = 0;
+		for (int8_t i = 0; i < movesToSearch; i++) {
+			if (i != movesCnt - 1) {
+				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+			}
+			const int16_t curMove = moves[moveIndices[i]];
+			//Make move
+			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
+			movesHistory.push(curMove);
+			//Search
+			int16_t res = -searchOnlyCaptures(-beta, -beta + 1);
+			if (res >= beta) {
+				res = -search<NonPV>(depth - multiCutDepthR, -beta, -beta + 1);
+			}
+			//Undo move
+			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+			movesHistory.pop();
+			if (res >= beta) {
+				if (++curCutNodes == cutNodesToQuit) {
+					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
+					return beta;
+				}
+			}
+		}
+	}
+
+	//ProbCut https://www.chessprogramming.org/ProbCut
 	const int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
 	constexpr int8_t probCutDepthR = 4;
 	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
@@ -306,8 +339,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			inScout++;
 			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
 			inScout--;
-			if (res > alpha && res < beta && beta - alpha > 1) {
-				res = -search<(pvNode ? PV : NonPV)>(depth - 1, -beta, -res);
+			if (res > alpha && res < beta && pvNode) {
+				res = -search<PV>(depth - 1, -beta, -res);
 			}
 		}
 
