@@ -1,11 +1,11 @@
 #include "AI.h"
 const int AI::MAX_PLY_MATE = 256;
-const int AI::CHECK_BONUS = 75;
-const int AI::MAX_HISTORY = 375;
-const int AI::COUNTER_MOVE_BONUS = 49;
+const int AI::CHECK_BONUS = 125;
+const int AI::MAX_HISTORY = 225;
+const int AI::COUNTER_MOVE_BONUS = 170;
 const int AI::KILLER_BONUS = 470;
-const int AI::NULL_MOVE_DEFEND_BONUS = 59;
-const int AI::NULL_MOVE_MATE_DEFEND_BONUS = 625;
+const int AI::NULL_MOVE_DEFEND_BONUS = 75;
+const int AI::NULL_MOVE_MATE_DEFEND_BONUS = 370;
 
 
 AI::AI() {
@@ -577,19 +577,19 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 	int8_t bmAfterNullEnd = getEndPos(bestMoveAfterNull);
 	uint64_t nullDefenders[6] = { 0, 0, 0, 0, 0, 0 };
 	if (bestMoveAfterNull != nullMove) {
-		nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
-		nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
-		nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
-		nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
-		nullDefenders[PAWN]		= pawnAtt<!pos->m_blackToMove>(bmAfterNullEnd);
-		nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
+		//nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
+		//nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
+		//nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
+		//nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
+		//nullDefenders[PAWN]		= pawnAtt<!pos->m_blackToMove>(bmAfterNullEnd);
+		//nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
 	}
 	bool nmIsBigCapture = 0;
 	if (bestMoveAfterNull != nullMove && pos->m_pieceOnTile[bmAfterNullEnd] != nullptr) {
 		const PieceType capturingType = pos->m_pieceOnTile[bmAfterNullEnd]->type;
 		const PieceType capturedType = pos->m_pieceOnTile[bmAfterNullSt]->type;
 		if (!(capturingType == KNIGHT && capturedType == BISHOP)) {
-		nmIsBigCapture =	pieceValue[capturingType] > pieceValue[capturedType];
+			nmIsBigCapture =	pieceValue[capturingType] > pieceValue[capturedType];
 		}
 	}
 
@@ -616,17 +616,18 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 		}
 		//Add bonus for evading opponent threats
 		//If defending
-		if (nullDefenders[pt] & (1ULL << endPos)) {
-			if (mateIfNullMove) {
-				curGuess += NULL_MOVE_MATE_DEFEND_BONUS;
-			} else {
-				if (nmIsBigCapture) {
-					curGuess += NULL_MOVE_DEFEND_BONUS / 5;
-				} else {
-					curGuess += NULL_MOVE_DEFEND_BONUS;
-				}
-			}
-		}
+		//if (nullDefenders[pt] & (1ULL << endPos)) {
+		//	if (mateIfNullMove) {
+		//		curGuess += NULL_MOVE_MATE_DEFEND_BONUS;
+		//		quiet = 0;
+		//	} else {
+		//		if (nmIsBigCapture) {
+		//			curGuess += NULL_MOVE_DEFEND_BONUS / 5;
+		//		} else {
+		//			curGuess += NULL_MOVE_DEFEND_BONUS;
+		//		}
+		//	}
+		//}
 
 		//If escaping from opponent threat
 		if (stPos == bmAfterNullEnd) {
@@ -673,7 +674,7 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 		if (givesCheck(curMove)) {
 			//Add pieceValue[piece to make move] / 32, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
-			curGuess += (CHECK_BONUS + (pieceValue[pt] / 32)) * (1 + 2 * mateIfNullMove);
+			curGuess += (CHECK_BONUS + (pieceValue[pt] / 32)) * (1 + mateIfNullMove);
 			quiet = 0;
 		}
 		//Add history heuristic
@@ -690,7 +691,7 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 			//If playing counter move to opponent threat
 			if (bestMoveAfterNull != nullMove) {
 				if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
-					curGuess += COUNTER_MOVE_BONUS / 5;
+					curGuess += COUNTER_MOVE_BONUS / 15;
 				}
 			}
 		}
