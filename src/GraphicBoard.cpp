@@ -56,17 +56,17 @@ void GraphicBoard::initPos(Position* pos) {
 void GraphicBoard::draw(int2 mouseCoords) {
 	for (int i = 0; i < 8; i++) {
 		for (int j = 0; j < 8; j++) {
-			Presenter::drawObject(m_tile[i][j]);
+			Drawable* drawTile = &m_tile[i][j];
+			if (flipped) {
+				drawTile = &m_tile[7 - i][7 - j];
+			}
+			Presenter::drawObject(*drawTile);
 			if (m_legalMoveTile[(i * 8) + j] != 0) {
-				Drawable* drawTile = &m_tile[i][j];
-				if (flipped) {
-					drawTile = &m_tile[7 - i][7 - j];
-				}
 				//Capture or en passant
 				if (m_pos->m_pieceOnTile[(i * 8) + j] != nullptr || 
 					(m_pos->m_pieceOnTile[m_selectedPiecePos]->type == PAWN && i * 8 + j == m_pos->m_possibleEnPassant)) {
 					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
-						SDL_SetTextureColorMod(m_captureTexture, 255, 0, 0);
+						SDL_SetTextureColorMod(m_captureTexture, 0, 255, 0);
 					}
 					Presenter::drawObject(m_captureTexture, drawTile->m_rect);
 					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
@@ -74,11 +74,11 @@ void GraphicBoard::draw(int2 mouseCoords) {
 					}
 				} else {
 					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
-						SDL_SetTextureColorMod(m_captureTexture, 255, 0, 0);
-						SDL_SetTextureAlphaMod(m_captureTexture, 220);
+						SDL_SetTextureColorMod(m_captureTexture, 0, 255, 0);
+						SDL_SetTextureAlphaMod(m_captureTexture, 180);
 						Presenter::drawObject(m_captureTexture, drawTile->m_rect);
-						SDL_SetTextureAlphaMod(m_captureTexture, 255);
 						SDL_SetTextureColorMod(m_captureTexture, 255, 255, 255);
+						SDL_SetTextureAlphaMod(m_captureTexture, 255);
 					} else {
 						Presenter::drawObject(m_possibleMoveTexture, drawTile->m_rect);
 					}
