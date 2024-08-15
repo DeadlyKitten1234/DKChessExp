@@ -1,8 +1,8 @@
 #include "AI.h"
 const int AI::MAX_PLY_MATE = 256;
-const int AI::CHECK_BONUS = 75;
+const int AI::CHECK_BONUS = 90;
 const int AI::MAX_HISTORY = 625;
-const int AI::COUNTER_MOVE_BONUS = 300;
+const int AI::COUNTER_MOVE_BONUS = 0;
 const int AI::KILLER_BONUS = 550;
 const int AI::NULL_MOVE_DEFEND_BONUS = 75;
 
@@ -96,13 +96,6 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 		eval = curEval;
 	}
 	return eval;
-}
-
-template<NodeType nodeType>
-inline int16_t AI::internalDeepening(int8_t depth, int16_t alpha, int16_t beta) {
-
-
-	return int16_t();
 }
 
 template<NodeType nodeType>
@@ -329,8 +322,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		int16_t res = 0;
 		if (i == 0 || depth <= 2) {
 			res = -search<(pvNode ? PV : NonPV)>(depth - 1, -beta, -alpha);
-		}
-		else {
+		} else {
 			//Perform zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
@@ -377,8 +369,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				//Update killers
 				if (killers[movesHistory.size()][0] == nullMove) {
 					killers[movesHistory.size()][0] = curMove;
-				}
-				else {
+				} else {
 					killers[movesHistory.size()][1] = curMove;
 				}
 			}
@@ -507,8 +498,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		int16_t res = 0;
 		if (i == 0) {
 			res = -searchOnlyCaptures(-beta, -alpha);
-		}
-		else {
+		} else {
 			//Perftorm zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
@@ -594,8 +584,7 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 		//Add bonuses; Have to have if(black) here, because template doesn't accept it as argument
 		if (pos->m_blackToMove) {
 			curGuess += (getSqBonus<1>(pt, endPos) - getSqBonus<1>(pt, stPos)) * 8 / 5;
-		}
-		else {
+		} else {
 			curGuess += (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos)) * 8 / 5;
 		}
 		//Add history heuristic
@@ -638,8 +627,7 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 			//pieceValue[KING] = inf; so king captures would be placed last; to prevent this add if (pt == KING)
 			if (pt == KING) {
 				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[QUEEN] * 3 / 2;
-			}
-			else {
+			} else {
 				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
 			}
 		}
