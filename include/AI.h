@@ -143,14 +143,14 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
-	//if (!pvNode && !pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
-	//	if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
-	//		return eval - pieceValue[BISHOP] * depth / 2;
-	//	}
-	//	if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
-	//		return alpha;
-	//	}
-	//}
+	if (!pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
+		if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
+			return eval - pieceValue[BISHOP] * depth / 2;
+		}
+		if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
+			return alpha;
+		}
+	}
 
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
 	int16_t bestMoveAfterNull = nullMove;
@@ -188,7 +188,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				}
 				//Don't do null moves in verification search
 				inNullMoveSearch += 3;
+				inScout++;
 				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta);
+				inScout--;
 				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					return verification;
@@ -204,6 +206,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	int16_t bestValue = -pieceValue[KING];
 
+	//Search tt
 	int16_t curBestMove = nullMove;
 	int16_t ttBestMove = (foundTTEntry ? ttEntryRes->bestMove : nullMove);
 	if (foundTTEntry && ttEntryRes->depth >= depth) {
@@ -242,14 +245,14 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
+
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
-	const int8_t multiCutDepthR = depth / 3 + 3;
-	if (inScout || inNullMoveSearch && !abCloseToMate && !(foundTTEntry && ttEntryRes->depth >= depth - multiCutDepthR)) {
-		int16_t movesToSearch = min<int16_t>(12, movesCnt);
-		int16_t cutNodesToQuit = 3;
+	const int8_t multiCutDepthR = depth / 3 + 2;
+	if (inScout && !abCloseToMate) {
 		int16_t curCutNodes = 0;
+		const int16_t movesToSearch = min<int16_t>(8, movesCnt), cutNodesToQuit = 2 + depth / 10;
 		for (int8_t i = 0; i < movesToSearch; i++) {
-			if (i != movesCnt - 1) {
+			if (i != movesToSearch - 1) {
 				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
 			}
 			const int16_t curMove = moves[moveIndices[i]];
@@ -258,8 +261,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			movesHistory.push(curMove);
 			//Search
 			int16_t res = -searchOnlyCaptures(-beta, -beta + 1);
-			if (res >= beta) {
-				res = -search<NonPV>(depth - multiCutDepthR, -beta, -beta + 1);
+			if (res >= beta && depth - 1 > multiCutDepthR) {
+				res = -search<NonPV>(depth - 1 - multiCutDepthR, -beta, -beta + 1);
 			}
 			killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 			//Undo move
@@ -268,7 +271,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			if (res >= beta) {
 				if (++curCutNodes == cutNodesToQuit) {
 					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
-					return beta;
+					return res;
 				}
 			}
 		}
@@ -466,7 +469,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			}
 		}
 	}
-	//Check tt
+	//Probe tt
 	bool foundTTEntry = 0;
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	//Anyting written in tt will already contain all captures, so don't check depth
@@ -555,7 +558,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			//Don't replace ttEntry with garbage one useful only for qsearch
 			if (!foundTTEntry || 
 				//Unless found a qsearch entry with a less useful lower bound
-				(foundTTEntry && ttEntryRes->depth == 0 && ttEntryRes->boundType() == LowBound && ttEntryRes->eval < res)) {
+				(foundTTEntry && ttEntryRes->depth <= 0 && ttEntryRes->boundType() == LowBound && ttEntryRes->eval < res)) {
 				
 				ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
 			}
@@ -573,7 +576,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	}
 	//Don't replace ttEntry with garbage one useful only for qsearch
 	if (!foundTTEntry || 
-		(foundTTEntry && ttEntryRes->depth == 0 && //Unless found a qsearch entry and
+		(foundTTEntry && ttEntryRes->depth <= 0 && //Unless found a qsearch entry and
 		//we have exact or we have a better high bound
 		(!failLow || (ttEntryRes->boundType() == HighBound && ttEntryRes->eval > alpha)))) {
 		
