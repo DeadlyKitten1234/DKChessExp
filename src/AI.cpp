@@ -1,9 +1,9 @@
 #include "AI.h"
 const int AI::MAX_PLY_MATE = 256;
-const int AI::CHECK_BONUS = 90;
-const int AI::MAX_HISTORY = 625;
-const int AI::COUNTER_MOVE_BONUS = 0;
-const int AI::KILLER_BONUS = 550;
+const int AI::CHECK_BONUS = 75;
+const int AI::MAX_HISTORY = 375;
+const int AI::COUNTER_MOVE_BONUS = 49;
+const int AI::KILLER_BONUS = 470;
 const int AI::NULL_MOVE_DEFEND_BONUS = 75;
 
 
@@ -236,33 +236,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
 
-	//ProbCut https://www.chessprogramming.org/ProbCut
-	const int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
-	constexpr int8_t probCutDepthR = 4;
-	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
-		for (int16_t i = 0; i < movesCnt; i++) {
-			if (i != movesCnt - 1) {
-				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
-			}
-			const int16_t curMove = moves[moveIndices[i]];
-			//Make move
-			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
-			movesHistory.push(curMove);
-			//Search
-			int16_t res = -searchOnlyCaptures(-probCutBeta, -probCutBeta + 1);
-			if (res >= probCutBeta) {
-				res = -search<NonPV>(depth - probCutDepthR, -probCutBeta, -probCutBeta + 1);
-			}
-			//Undo move
-			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
-			movesHistory.pop();
-			if (res >= probCutBeta) {
-				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
-				return res;
-			}
-		}
-	}
-
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 2;
 	if (inScout && !abCloseToMate) {
@@ -290,6 +263,33 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
 					return res;
 				}
+			}
+		}
+	}
+
+	//ProbCut https://www.chessprogramming.org/ProbCut
+	const int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
+	constexpr int8_t probCutDepthR = 4;
+	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
+		for (int16_t i = 0; i < movesCnt; i++) {
+			if (i != movesCnt - 1) {
+				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+			}
+			const int16_t curMove = moves[moveIndices[i]];
+			//Make move
+			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
+			movesHistory.push(curMove);
+			//Search
+			int16_t res = -searchOnlyCaptures(-probCutBeta, -probCutBeta + 1);
+			if (res >= probCutBeta) {
+				res = -search<NonPV>(depth - probCutDepthR, -probCutBeta, -probCutBeta + 1);
+			}
+			//Undo move
+			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+			movesHistory.pop();
+			if (res >= probCutBeta) {
+				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
+				return res;
 			}
 		}
 	}
@@ -577,6 +577,7 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 		const int16_t curMove = moves[i];
 		const int8_t stPos = getStartPos(curMove), endPos = getEndPos(curMove);
 		const PieceType pt = pos->m_pieceOnTile[stPos]->type;
+		bool quiet = 0;//Quiet refers to moves that aren't capture, promotion or check
 		int curGuess = 0;
 		indices[i] = i;
 		//Favor move in tt
@@ -591,15 +592,6 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 		} else {
 			curGuess += (getSqBonus<0>(pt, endPos) - getSqBonus<0>(pt, stPos)) * 8 / 5;
 		}
-		//Add history heuristic
-		//curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
-		//Add counter move heuristic
-		if (!movesHistory.empty() && movesHistory.top() != nullMove) {
-			const int8_t lastMoveEnd = getEndPos(movesHistory.top());
-			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd]) {
-				curGuess += COUNTER_MOVE_BONUS;
-			}
-		}
 		//Add bonus for evading opponent threats
 		//If defending
 		if (nullDefenders[pt] && (1ULL << endPos)) {
@@ -608,12 +600,6 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 		//If escaping from opponent threat
 		if (stPos == bmAfterNullEnd) {
 			curGuess += pieceValue[pt] / 32;
-		}
-		//If playing counter move to opponent threat
-		if (bestMoveAfterNull != nullMove) {
-			if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
-				curGuess += COUNTER_MOVE_BONUS / 3;
-			}
 		}
 		//Add killers
 		if (curMove == killers[movesHistory.size()][0] ||
@@ -634,6 +620,7 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 			} else {
 				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
 			}
+			quiet = 0;
 		}
 		//If tile attacked by opponent pawn
 		if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
@@ -645,12 +632,32 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 			//Multiply by 15, because when capturing we multiply 
 			//by 13 and promoting is more likely to be good (I think)
 			curGuess += 15 * pieceValue[getPromotionPiece(curMove)];
+			quiet = 0;
 		}
 		//Favor checks slightly
 		if (givesCheck(curMove)) {
 			//Add pieceValue[piece to make move] / 32, because generally checks with
 			//queens and rooks are better (and there is a higher chance for a fork)
 			curGuess += CHECK_BONUS + (pieceValue[pt] / 32);
+			quiet = 0;
+		}
+		//Add history heuristic
+		if (quiet) {
+			curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
+			//Add counter move heuristic
+			if (!movesHistory.empty() && movesHistory.top() != nullMove) {
+				const int8_t lastMoveEnd = getEndPos(movesHistory.top());
+				if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd]) {
+					curGuess += COUNTER_MOVE_BONUS;
+				}
+			}
+			curGuess -= pieceValue[QUEEN];
+			//If playing counter move to opponent threat
+			if (bestMoveAfterNull != nullMove) {
+				if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
+					curGuess += COUNTER_MOVE_BONUS / 5;
+				}
+			}
 		}
 
 		//Write in guess array that will later be used to sort the moves

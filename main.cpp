@@ -65,6 +65,7 @@ int main(int argc, char* argv[]) {
     //char fen[] = "8/k7/3p4/p2P1p2/P2P1P2/8/8/K7 w - - 0 1";
     //char fen[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     char fen[] = "r1bqk2r/ppp2ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 0 1";
+    //char fen[] = "r2qk2r/1p3p1p/p1pb1np1/n2p1p2/Q2P4/2N1PN2/PPP2PPP/R1B2RK1 w KQkq - 0 1";
     //reverseFenPosition(fen);
     pos->readFEN(fen);
 

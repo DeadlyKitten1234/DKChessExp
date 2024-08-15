@@ -37,9 +37,9 @@ extern uint64_t rookMovesLookup[64][4096];
 extern uint64_t bishopMovesLookup[64][4096];
 //sz = 256, because i couldn't find numbers that fit in 8, 16, 32, 64, 128
 extern uint8_t kingMovesCntLookup[64][256];//Also a magic hash lookup table; 
-extern uint64_t rookMagic[64];
-extern uint64_t bishopMagic[64];
-extern uint64_t kingMagic[64];
+extern const uint64_t rookMagic[64];
+extern const uint64_t bishopMagic[64];
+extern const uint64_t kingMagic[64];
 extern int8_t rookRelevantSqCnt[64];
 extern int8_t bishopRelevantSqCnt[64];
 extern uint64_t rookRelevantSq[64];

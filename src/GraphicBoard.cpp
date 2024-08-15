@@ -120,7 +120,7 @@ void GraphicBoard::draw(int2 mouseCoords) {
 void GraphicBoard::flip() {
 	if (SDL_GetTicks64() > flipAvalableTime) {
 		flipped = !flipped;
-		flipAvalableTime = SDL_GetTicks64() + 100;
+		flipAvalableTime = SDL_GetTicks64() + 250;
 	}
 }
 
