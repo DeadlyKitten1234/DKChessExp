@@ -80,14 +80,18 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
+
 		int16_t curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
 
+
+		//Exit if ran out of time
 		if (Clock::now() >= searchEndTime) {
 			std::cout << "Search ended { Eval: " << eval << "; Best move: ";
 			printName(bestMove);
 			std::cout << "; }\n";
 			return eval;
 		}
+		//Print info
 		//std::setw(x) makes the next output have a min width of x (it just adds spaces)
 		std::cout << "Depth " << std::setw(2) << (int)i << ": { Eval = " << std::setw(5) << curEval << "; Best move = ";
 		printName(bestMove);
@@ -123,8 +127,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
-	const bool abCloseToMate = abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
-		abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
+	const bool abCloseToMate =	abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
+								abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
 	//Razoring
 	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] * 2 + pvNode * 35 <= alpha &&
 		(pos->m_blackToMove ? pos->m_whiteTotalPiecesCnt : pos->m_blackTotalPiecesCnt) >= 3) {
@@ -175,9 +179,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					return nullRes;
 				}
 				//Don't do null moves in verification search
-				inNullMoveSearch += 3; inScout++;
+				inNullMoveSearch += 3;
 				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta);
-				inNullMoveSearch -= 3;  inScout--;
+				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					return verification;
 				}
@@ -232,6 +236,33 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
 
+	//ProbCut https://www.chessprogramming.org/ProbCut
+	const int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
+	constexpr int8_t probCutDepthR = 4;
+	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
+		for (int16_t i = 0; i < movesCnt; i++) {
+			if (i != movesCnt - 1) {
+				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+			}
+			const int16_t curMove = moves[moveIndices[i]];
+			//Make move
+			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
+			movesHistory.push(curMove);
+			//Search
+			int16_t res = -searchOnlyCaptures(-probCutBeta, -probCutBeta + 1);
+			if (res >= probCutBeta) {
+				res = -search<NonPV>(depth - probCutDepthR, -probCutBeta, -probCutBeta + 1);
+			}
+			//Undo move
+			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+			movesHistory.pop();
+			if (res >= probCutBeta) {
+				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
+				return res;
+			}
+		}
+	}
+
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 2;
 	if (inScout && !abCloseToMate) {
@@ -259,33 +290,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
 					return res;
 				}
-			}
-		}
-	}
-
-	//ProbCut https://www.chessprogramming.org/ProbCut
-	const int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
-	constexpr int8_t probCutDepthR = 4;
-	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
-		for (int16_t i = 0; i < movesCnt; i++) {
-			if (i != movesCnt - 1) {
-				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
-			}
-			const int16_t curMove = moves[moveIndices[i]];
-			//Make move
-			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
-			movesHistory.push(curMove);
-			//Search
-			int16_t res = -searchOnlyCaptures(-probCutBeta, -probCutBeta + 1);
-			if (res >= probCutBeta) {
-				res = -search<NonPV>(depth - probCutDepthR, -probCutBeta, -probCutBeta + 1);
-			}
-			//Undo move
-			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant);
-			movesHistory.pop();
-			if (res >= probCutBeta) {
-				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
-				return res;
 			}
 		}
 	}
@@ -329,8 +333,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			inScout++;
 			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
 			inScout--;
-			if (res > alpha && res < beta && beta - alpha > 1) {
-				res = -search<PV>(depth - 1, -beta, -res);
+			if (res > alpha && pvNode && beta - alpha > 1) {
+				res = -search<PV>(depth - 1, -beta, -alpha);
 			}
 		}
 		killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
