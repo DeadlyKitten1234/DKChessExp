@@ -2,7 +2,6 @@
 #include <cinttypes>
 //Everywhere generation refers to the "index" of the current search using the tt
 //Higher generation means newer; We use generation to determine how much a given entry is "worth"
-
 enum BoundType : int8_t {
 	BoundNULL = 0,
 	LowBound = 1,
@@ -22,7 +21,7 @@ public:
 	inline bool sameKey(const uint64_t key_) const {
 		return (((key_ >> 16) & 0xFFFF) == key1) && ((key_ & 0xFFFF) == key2);
 	}
-	inline void init(uint64_t key_, int16_t bestMove_, int16_t eval_, uint8_t depth_, uint8_t gen_, BoundType type_) {
+	inline void init(uint64_t key_, int16_t bestMove_, int16_t eval_, int8_t depth_, uint8_t gen_, BoundType type_) {
 		key1 = (key_ >> 16) & 0xFFFF;
 		key2 = key_ & 0xFFFF;
 		bestMove = bestMove_;
@@ -30,13 +29,13 @@ public:
 		depth = depth_;
 		genAndType = (gen_ << 3) + type_;
 	}
-	inline uint16_t calcValue() const {
+	inline int16_t calcValue() const {
 		//This function is used to decide what the worth of an entry is
 		//in order to pick the least valuable one and replace it with a new one
 
 		//Here we use the genAndType arrangement, where the generation is 
 		//already shifted left 3 => weigh generation 8 times as much as depth
-		return (genAndType & 0xF8) + depth + (4 * (boundType() == BoundType::Exact)) + (2 * (boundType() == BoundType::LowBound));
+		return (genAndType & 0xF8) + depth + 3 * (boundType() == BoundType::Exact);
 	}
 
 	//malloc allocates 12 bytes for optimisation if a int32_t is used?
@@ -49,7 +48,7 @@ public:
 	uint16_t key2;
 	int16_t bestMove;
 	int16_t eval;
-	uint8_t depth;
+	int8_t depth;
 	uint8_t genAndType;//First 5 bits - generation; 1 bit for later use maybe?; 2 bits for type
 };
 
@@ -109,21 +108,21 @@ inline TTEntry* TranspositionTable::find(const uint64_t key, bool& found) const 
 
 	
 	//Even if key hasn't been found, return the least valuable entry to be replaced
-	TTEntry* ans = entriesInChunk;
-	int16_t maxValue = ans->calcValue();
+	TTEntry* ans = &entriesInChunk[0];
+	int16_t minValue = ans->calcValue();
 	//This was coded on MSVS and for some reason VC didn't want to unroll loops
 	//So had to manually unroll to get a *slightly* (about 4%) faster performance
 	int16_t val = entriesInChunk[1].calcValue();
 	if (entriesInChunk[1].gen() > gen) { val -= 0x100; }
-	if (val > maxValue) {
-		maxValue = val;
+	if (val < minValue) {
+		minValue = val;
 		ans = &entriesInChunk[1];
 	}
 
 	val = entriesInChunk[2].calcValue();
 	if (entriesInChunk[2].gen() > gen) { val -= 0x100; }
-	if (val > maxValue) {
-		maxValue = val;
+	if (val < minValue) {
+		minValue = val;
 		ans = &entriesInChunk[2];
 	}
 

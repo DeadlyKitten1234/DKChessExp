@@ -75,7 +75,7 @@ void GraphicBoard::draw(int2 mouseCoords) {
 				} else {
 					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
 						SDL_SetTextureColorMod(m_captureTexture, 255, 0, 0);
-						SDL_SetTextureAlphaMod(m_captureTexture, 180);
+						SDL_SetTextureAlphaMod(m_captureTexture, 220);
 						Presenter::drawObject(m_captureTexture, drawTile->m_rect);
 						SDL_SetTextureAlphaMod(m_captureTexture, 255);
 						SDL_SetTextureColorMod(m_captureTexture, 255, 255, 255);
@@ -114,6 +114,13 @@ void GraphicBoard::draw(int2 mouseCoords) {
 		const Piece* selPiece = m_pos->m_pieceOnTile[m_selectedPiecePos];
 		SDL_Rect pieceRect = { int(mouseCoords.x - tileSz * 0.7), int(mouseCoords.y - tileSz * 0.7), int(tileSz * 1.4), int(tileSz * 1.4) };
 		Presenter::drawPiece(selPiece->type, pieceRect, selPiece->black);
+	}
+}
+
+void GraphicBoard::flip() {
+	if (SDL_GetTicks64() > flipAvalableTime) {
+		flipped = !flipped;
+		flipAvalableTime = SDL_GetTicks64() + 100;
 	}
 }
 
