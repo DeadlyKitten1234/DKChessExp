@@ -5,6 +5,7 @@ const int AI::MAX_HISTORY = 375;
 const int AI::COUNTER_MOVE_BONUS = 49;
 const int AI::KILLER_BONUS = 470;
 const int AI::NULL_MOVE_DEFEND_BONUS = 75;
+const int AI::NULL_MOVE_MATE_DEFEND_BONUS = 625;
 
 
 AI::AI() {
@@ -80,8 +81,11 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
-
+		//int16_t windowSz = 1;
+		//int16_t curEval = search<Root>(i, eval - windowSz, eval + windowSz);
+		//if (abs(eval - curEval) >= windowSz) {
 		int16_t curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+		//}
 
 
 		//Exit if ran out of time
@@ -147,6 +151,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
 	int16_t bestMoveAfterNull = nullMove;
 	const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
+	bool mateIfNullMove = false;
 	if (!pvNode && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate && eval >= beta) {
 		//Don't chain a lot of null moves, but if last was null and in 
 		//only one null move search, do null movee to detect zugzwang
@@ -185,6 +190,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				if (verification >= beta) {
 					return verification;
 				}
+			}
+			//Detect when doing nothing will result in mate
+			if (nullRes <= -pieceValue[PAWN] + MAX_PLY_MATE) {
+				mateIfNullMove = 1;
 			}
 		}
 	}
@@ -234,7 +243,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	int16_t moveIndices[256];
-	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull);
+	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, mateIfNullMove);
 
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 2;
@@ -555,7 +564,9 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indices, int16_t ttBestMove, int16_t bestMoveAfterNull) {
+inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indices, 
+							int16_t ttBestMove, int16_t bestMoveAfterNull, bool mateIfNullMove) {
+	
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
 	const int8_t enemyKingPos = (pos->m_blackToMove ? pos->m_whitePiece[0]->pos : pos->m_blackPiece[0]->pos);
 
@@ -595,8 +606,13 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 		//Add bonus for evading opponent threats
 		//If defending
 		if (nullDefenders[pt] && (1ULL << endPos)) {
-			curGuess += NULL_MOVE_DEFEND_BONUS;
+			if (mateIfNullMove) {
+				curGuess += NULL_MOVE_MATE_DEFEND_BONUS;
+			} else {
+				curGuess += NULL_MOVE_DEFEND_BONUS;
+			}
 		}
+
 		//If escaping from opponent threat
 		if (stPos == bmAfterNullEnd) {
 			curGuess += pieceValue[pt] / 32;
@@ -643,6 +659,7 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 		}
 		//Add history heuristic
 		if (quiet) {
+			curGuess -= pieceValue[QUEEN];
 			curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
 			//Add counter move heuristic
 			if (!movesHistory.empty() && movesHistory.top() != nullMove) {
@@ -651,7 +668,6 @@ inline void AI::orderMoves(int16_t moves[256], int16_t movesCnt, int16_t* indice
 					curGuess += COUNTER_MOVE_BONUS;
 				}
 			}
-			curGuess -= pieceValue[QUEEN];
 			//If playing counter move to opponent threat
 			if (bestMoveAfterNull != nullMove) {
 				if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
