@@ -77,23 +77,23 @@ void AI::updateHistoryNewSearch() {
 
 #include <iomanip>//setw() when outputing info
 inline int16_t AI::iterativeDeepening(int8_t depth) {
-	int16_t eval = 0;
-	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
+	int16_t eval = pos->evaluate();
+	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) { 
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
 
-		//<https://www.chessprogramming.org/MTD(f)>
 		int16_t curEval = eval;
-		int16_t bound[2] = { -pieceValue[KING] - 1, pieceValue[KING] + 1 };
-		while (bound[0] < bound[1]) {
-			int16_t beta = curEval + (curEval == bound[0]);
-			curEval = search<Root>(i, beta - 1, beta);
-			bound[curEval < beta] = curEval;
-		}
-
-
-		//int16_t curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
-
+		//if (i >= 0) {
+		//	//<https://www.chessprogramming.org/MTD(f)>
+		//	int16_t bound[2] = { -pieceValue[KING] - 1, pieceValue[KING] + 1 };
+		//	while (bound[0] < bound[1]) {
+		//		int16_t beta = curEval + (curEval == bound[0]);
+		//		curEval = search<Root>(i, beta - 1, beta);
+		//		bound[curEval < beta] = curEval;
+		//	}
+		//} else {
+		curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+		//}
 
 		//Exit if ran out of time
 		if (Clock::now() >= searchEndTime) {
@@ -147,15 +147,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		depth--;
 	}
 	
-	//Futility pruning <https://www.chessprogramming.org/Futility_Pruning>
-	if (!pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
-		if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
-			return eval - pieceValue[BISHOP] * depth / 2;
-		}
-		if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
-			return alpha;
-		}
-	}
+	
+	prefetch((const char*)&tt.chunk[pos->zHash >> tt.shRVal].entry);
 	
 	//Null move pruning <https://www.chessprogramming.org/Null_Move_Pruning>
 	int16_t bestMoveAfterNull = nullMove;
@@ -210,11 +203,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	//Fail low means no move gives a score > alpha
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1;
-	bool foundTTEntry = 0;
-	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	int16_t bestValue = -pieceValue[KING];
 
+	bool foundTTEntry = 0;
 	//Probe tt
+	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	int16_t curBestMove = nullMove;
 	int16_t ttBestMove = (foundTTEntry ? ttEntryRes->bestMove : nullMove);
 	if (foundTTEntry && ttEntryRes->depth >= depth) {
@@ -250,7 +243,13 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			return ttEntryRes->eval;
 		}
 	}
-
+	
+	//Futility pruning <https://www.chessprogramming.org/Futility_Pruning>
+	if (!pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
+		if (eval - pieceValue[PAWN] * depth / 2 >= beta && (ttBestMove == nullMove || pos->isCapture(ttBestMove))) {
+			return (eval + beta) / 2;
+		}
+	}
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, mateIfNullMove);
 
@@ -261,9 +260,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		int16_t curCutNodes = 0;
 		const int16_t movesToSearch = min<int16_t>(8, movesCnt), cutNodesToQuit = 2 + depth / 10;
 		for (int8_t i = 0; i < movesToSearch; i++) {
-			if (i != movesToSearch - 1) {
-				prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
-			}
 			const int16_t curMove = moves[moveIndices[i]];
 			//Make move
 			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
@@ -291,9 +287,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	constexpr int8_t probCutDepthR = 4;
 	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
 		for (int16_t i = 0; i < movesCnt; i++) {
-			if (i != movesCnt - 1) {
-				prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
-			}
 			const int16_t curMove = moves[moveIndices[i]];
 			//Make move
 			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
@@ -315,15 +308,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	//Search moves
 	for (int16_t i = 0; i < movesCnt; i++) {
-		//Prefetch next move in tt
-		if (i != movesCnt - 1) {
-			prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
-		}
 		const int16_t curMove = moves[moveIndices[i]];
 		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
 		if (depth <= 2) {
 			int16_t evalIncrease = 0;
-			if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
+			if (pos->isCapture(curMove)) {
 				evalIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
 			}
 			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
@@ -377,8 +366,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
 			}
-			const bool isCapture = pos->m_pieceOnTile[getEndPos(curMove)] != nullptr;
-			if (!isCapture) {
+			if (!pos->isCapture(curMove)) {
 				//Update history heuristic
 				int* const hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[getStartPos(curMove)]->type][getEndPos(curMove)];
 				int clampedBonus = std::clamp(depth * depth, -MAX_HISTORY, MAX_HISTORY);
@@ -414,7 +402,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			}
 		}
 		//Uncertainty cutoffs https://www.chessprogramming.org/Uncertainty_Cut-Offs
-		if ((inScout && i > 6) && (pos->m_pieceOnTile[getEndPos(curMove)] == nullptr || !givesCheck(curMove))) {
+		if ((inScout && i > 6) && (!pos->isCapture(curMove) || !givesCheck(curMove))) {
 			return alpha;
 		}
 	}
@@ -454,7 +442,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1;
 
-	int16_t moves[16];
+	int16_t moves[64], moveIndices[64];
 	pos->updateLegalMoves<1>(moves, true);
 	const int16_t movesCnt = pos->m_legalMovesCnt;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
@@ -490,21 +478,15 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		failLow = 0;
 	}
 
-	int16_t moveIndices[16];
 	orderMoves(moves, movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove), nullMove);
 
 	int16_t curBestMove = nullMove;
 	for (int16_t i = 0; i < movesCnt; i++) {
-		//Prefetch next move
-		if (i != movesCnt - 1) {
-			prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
-		}
 		const int16_t curMove = moves[moveIndices[i]];
 		//If can't improve alpha, don't search move; This is (i think) delta pruning
 		//https://www.chessprogramming.org/Delta_Pruning
 		int16_t evalIncrease = 0;
-		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
-			//Capture
+		if (pos->isCapture(curMove)) {
 			evalIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
 		}
 		if (getPromotionPiece(curMove) != PieceType::UNDEF) {
@@ -594,7 +576,7 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 	//	nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
 	//}
 	bool nmIsBigCapture = 0;
-	if (bestMoveAfterNull != nullMove && pos->m_pieceOnTile[bmAfterNullEnd] != nullptr) {
+	if (bestMoveAfterNull != nullMove && pos->isCapture(bestMoveAfterNull)) {
 		const PieceType capturingType = pos->m_pieceOnTile[bmAfterNullEnd]->type;
 		const PieceType capturedType = pos->m_pieceOnTile[bmAfterNullSt]->type;
 		if (!(capturingType == KNIGHT && capturedType == BISHOP)) {
@@ -659,7 +641,7 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 		}
 
 		//Favor captures
-		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
+		if (pos->isCapture(curMove)) {
 			//13 * capturedPieceVal to prioritise captures before non-captures and 
 			//to incentivise capturing more valuable pieces; We chosse 13, because
 			//13 is the lowest number above how much pawns a queen is worth
