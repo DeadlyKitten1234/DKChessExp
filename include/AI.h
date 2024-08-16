@@ -24,6 +24,7 @@ public:
 	~AI();
 
 	void initPos(Position* pos_);
+	//@returns Eval
 	int16_t startSearch(uint64_t timeToSearch);
 	int16_t bestMove;
 
@@ -33,9 +34,12 @@ private:
 	//Warning: pos is referece => changes made by the AI will impact the original position
 	Position* pos;
 
+	//@returns Eval
 	int16_t iterativeDeepening(int8_t depth);
+	//@returns Eval
 	template<NodeType nodeType>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
+	//@returns Eval
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 	inline void orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices, 
 							int16_t ttBestMove, int16_t bestMoveAfterNull, bool mateIfNullMove = false);

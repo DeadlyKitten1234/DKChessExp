@@ -29,10 +29,9 @@ public:
 		depth = depth_;
 		genAndType = (gen_ << 3) + type_;
 	}
+	//This function is used to decide what the worth of an entry is
+	//in order to pick the least valuable one and replace it with a new one
 	inline int16_t calcValue() const {
-		//This function is used to decide what the worth of an entry is
-		//in order to pick the least valuable one and replace it with a new one
-
 		//Here we use the genAndType arrangement, where the generation is 
 		//already shifted left 3 => weigh generation 8 times as much as depth
 		return (genAndType & 0xF8) + depth + 3 * (boundType() == BoundType::Exact);
@@ -42,8 +41,8 @@ public:
 	//Howerver we want class to take up 10 bytes, so key is split into 2 * int16_t
 	//Note: we don't use the full 64 bit key, because in tt first x=log2(sz)+15 bits are used
 	//as index and here we use last 32 bits for confirmation key. Because zobrist hashing has
-	//collisions even with 64 bits, using 32+x bits will increase the probability of collision
-	//2^(32-x) times, but it should still be quite rare; (Example: sz=64MB; x = 21; P(collision) = 2^(-53))
+	//collisions even with 64 bits, using 32+x bits will increase the probability of collision 2^(32-x) 
+	//times, but it should still be quite rare; (Example: sz=64MB; x = 21; P(collision) is 2^11 = 2048 times higher)
 	uint16_t key1;
 	uint16_t key2;
 	int16_t bestMove;

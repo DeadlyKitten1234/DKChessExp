@@ -49,6 +49,7 @@ inline bool tileAttackedBySlidingPiece(const Position& pos, int8_t tile, int8_t 
 }
 
 //Explaination of why we pass on bool useAttackedTiles is above getPinsAndChecks
+//@returns number of moves
 template<bool capturesOnly, bool useAttackedTiles>
 inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curMoveCnt) {
 	int16_t ans = curMoveCnt;
@@ -140,6 +141,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 	return ans - curMoveCnt;
 }
 
+//@returns number of moves
 template<bool onlyQueens>
 inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint64_t bitmask, int8_t add, bool doubleMove, bool blackToMove) {
 	int16_t ans = moveStIdx;
@@ -163,6 +165,7 @@ inline int16_t extractPawnMovesFromBitmask(int16_t* out, int16_t moveStIdx, uint
 	return ans - moveStIdx;
 }
 
+//@returns number of moves
 template<bool capturesOnly>
 inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t moveStIdx) {
 	int16_t ans = moveStIdx;
@@ -226,7 +229,7 @@ inline int16_t generatePawnMoves(const Position& pos, int16_t* out, int16_t move
 	return ans - moveStIdx;
 }
 
-//Here PieceType is basicly a parameter
+//@returns number of moves
 template<PieceType type, bool capturesOnly>
 inline int16_t generatePieceMoves(const Position& pos, int16_t* out, int16_t moveStIdx) {
 	int16_t ans = moveStIdx;
@@ -340,6 +343,7 @@ inline void getPinsAndChecks(const Position& pos) {
 	}
 }
 
+//Calculates which squares give check
 inline void setChecksToEnemyKing(const Position& pos) {
 	const int8_t enemyKingPos = (pos.m_blackToMove ? pos.m_whitePiece : pos.m_blackPiece)[0]->pos;
 	const uint64_t allPcs = pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard;
@@ -354,7 +358,7 @@ inline void setChecksToEnemyKing(const Position& pos) {
 
 }
 
-//Returns size
+//@returns number of moves
 template<bool capturesOnly>
 inline int16_t generateMoves(const Position& pos, int16_t* out, bool calculateChecks = false) {
 	Piece** friendlyPiece = (pos.m_blackToMove ? pos.m_blackPiece : pos.m_whitePiece);

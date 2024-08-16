@@ -1,5 +1,6 @@
 #pragma once
 #include "Piece.h"
+#include "Move.h"
 #include "EvalValues.h"
 #include <algorithm>//min
 using std::abs;
@@ -15,7 +16,8 @@ public:
 	//stTile == -1 means revert capture; endTile == -1 means make capture
 	inline void updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile);
 	uint64_t getZHashIfMoveMade(const int16_t move) const;
-	int8_t makeMove(int16_t move);//Returns captured piece idx
+	//@returns Captured piece idx
+	int8_t makeMove(int16_t move);
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
 	void makeNullMove();
 	void undoNullMove(int8_t possibleEnPassant_);
@@ -26,11 +28,14 @@ public:
 	void updateLegalMoves(int16_t out[256], const bool calculateChecks = 0);
 	inline int16_t evaluate();
 
-	inline bool hasNonPawnPiece(bool black) const {
+	inline bool hasNonPawnPiece(const bool black) const {
 		return (black ? m_blackPiecesCnt[PAWN] != m_blackTotalPiecesCnt - 1 : m_whitePiecesCnt[PAWN] != m_whiteTotalPiecesCnt - 1);
 	}
-	inline int8_t nonPawnPcsCnt(bool black) const {
+	inline int8_t nonPawnPcsCnt(const bool black) const {
 		return (black ? m_blackTotalPiecesCnt - 1 - m_blackPiecesCnt[PAWN] : m_whiteTotalPiecesCnt - 1 - m_whitePiecesCnt[PAWN]);
+	}
+	inline bool isCapture(const int16_t move) const {
+		return (m_pieceOnTile[getEndPos(move)] != nullptr);
 	}
 
 	static const char* m_startFEN;
