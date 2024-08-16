@@ -36,7 +36,7 @@ int16_t AI::startSearch(uint64_t timeToSearch) {
 	searchEndTime = Clock::now() + timeToSearch;
 	//Reset killers
 	for (uint8_t i = 0; i < 128; i++) {
-		killers[i][0] = killers[i + 1][0] = nullMove;
+		killers[i][0] = killers[i][1] = nullMove;
 	}
 	tt.newGen();
 	return iterativeDeepening(127);
@@ -81,11 +81,18 @@ inline int16_t AI::iterativeDeepening(int8_t depth) {
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
-		//int16_t windowSz = 1;
-		//int16_t curEval = search<Root>(i, eval - windowSz, eval + windowSz);
-		//if (abs(eval - curEval) >= windowSz) {
-		int16_t curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
-		//}
+
+		//<https://www.chessprogramming.org/MTD(f)>
+		int16_t curEval = eval;
+		int16_t bound[2] = { -pieceValue[KING] - 1, pieceValue[KING] + 1 };
+		while (bound[0] < bound[1]) {
+			int16_t beta = curEval + (curEval == bound[0]);
+			curEval = search<Root>(i, beta - 1, beta);
+			bound[curEval < beta] = curEval;
+		}
+
+
+		//int16_t curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
 
 
 		//Exit if ran out of time
@@ -443,7 +450,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1;
 
-	int16_t moves[256];
+	int16_t moves[16];
 	pos->updateLegalMoves<1>(moves, true);
 	const int16_t movesCnt = pos->m_legalMovesCnt;
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
@@ -479,7 +486,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		failLow = 0;
 	}
 
-	int16_t moveIndices[256];
+	int16_t moveIndices[16];
 	orderMoves(moves, movesCnt, moveIndices, (foundTTEntry ? ttEntryRes->bestMove : nullMove), nullMove);
 
 	int16_t curBestMove = nullMove;
@@ -500,11 +507,8 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 			//Promotion
 			evalIncrease += pieceValue[getPromotionPiece(curMove)];
 		}
-		if (staticEval + evalIncrease - pieceValue[QUEEN] - pieceValue[PAWN]/*safety margin*/ >= beta) {
-			return staticEval + evalIncrease - pieceValue[QUEEN] - pieceValue[PAWN];
-		}
 		if (staticEval + evalIncrease + pieceValue[PAWN]/*safety margin*/ <= alpha) {
-			continue;
+			break;
 		}
 
 		//Make move
@@ -567,7 +571,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indices, 
+inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices, 
 							int16_t ttBestMove, int16_t bestMoveAfterNull, bool mateIfNullMove) {
 	
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
@@ -575,21 +579,21 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 
 	int8_t bmAfterNullSt = getStartPos(bestMoveAfterNull);
 	int8_t bmAfterNullEnd = getEndPos(bestMoveAfterNull);
-	uint64_t nullDefenders[6] = { 0, 0, 0, 0, 0, 0 };
-	if (bestMoveAfterNull != nullMove) {
-		//nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
-		//nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
-		//nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
-		//nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
-		//nullDefenders[PAWN]		= pawnAtt<!pos->m_blackToMove>(bmAfterNullEnd);
-		//nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
-	}
+	//uint64_t nullDefenders[6] = { 0, 0, 0, 0, 0, 0 };
+	//if (bestMoveAfterNull != nullMove) {
+	//	nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
+	//	nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
+	//	nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
+	//	nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
+	//	nullDefenders[PAWN]		= pawnAtt<!pos->m_blackToMove>(bmAfterNullEnd);
+	//	nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
+	//}
 	bool nmIsBigCapture = 0;
 	if (bestMoveAfterNull != nullMove && pos->m_pieceOnTile[bmAfterNullEnd] != nullptr) {
 		const PieceType capturingType = pos->m_pieceOnTile[bmAfterNullEnd]->type;
 		const PieceType capturedType = pos->m_pieceOnTile[bmAfterNullSt]->type;
 		if (!(capturingType == KNIGHT && capturedType == BISHOP)) {
-			nmIsBigCapture =	pieceValue[capturingType] > pieceValue[capturedType];
+			nmIsBigCapture = pieceValue[capturingType] > pieceValue[capturedType];
 		}
 	}
 
@@ -644,6 +648,11 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 			curGuess += KILLER_BONUS;
 		}
 
+		//If tile attacked by opponent pawn
+		if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
+			curGuess -= 4 * pieceValue[pt];
+		}
+
 		//Favor captures
 		if (pos->m_pieceOnTile[getEndPos(curMove)] != nullptr) {
 			//13 * capturedPieceVal to prioritise captures before non-captures and 
@@ -658,11 +667,6 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 			}
 			quiet = 0;
 		}
-		//If tile attacked by opponent pawn
-		if ((1ULL << endPos) & pos->enemyPawnAttacksBitmask) {
-			curGuess -= 4 * pieceValue[pt];
-		}
-
 		//Promoting is good
 		if (getPromotionPiece(curMove) != UNDEF) {
 			//Multiply by 15, because when capturing we multiply 
@@ -677,9 +681,9 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 			curGuess += (CHECK_BONUS + (pieceValue[pt] / 32)) * (1 + mateIfNullMove);
 			quiet = 0;
 		}
-		//Add history heuristic
 		if (quiet) {
-			curGuess -= pieceValue[QUEEN];
+			curGuess -= pieceValue[BISHOP];
+			//Add history heuristic
 			curGuess += historyHeuristic[pos->m_blackToMove][pt][endPos];
 			//Add counter move heuristic
 			if (!movesHistory.empty() && movesHistory.top() != nullMove) {
@@ -692,6 +696,13 @@ inline void AI::orderMoves	(int16_t moves[256], int16_t movesCnt, int16_t* indic
 			if (bestMoveAfterNull != nullMove) {
 				if (curMove == counterMove[!pos->m_blackToMove][pos->m_pieceOnTile[bmAfterNullSt]->type][bmAfterNullEnd]) {
 					curGuess += COUNTER_MOVE_BONUS / 15;
+				}
+			}
+			if (mateIfNullMove) {
+				if ((1ULL << endPos) & (betweenBitboard[bmAfterNullSt][bmAfterNullEnd] |
+					betweenBitboard[bmAfterNullEnd][(pos->m_blackToMove ? pos->m_whitePiece : pos->m_blackPiece)[0]->pos])) {
+
+					curGuess += NULL_MOVE_DEFEND_BONUS * 2;
 				}
 			}
 		}
