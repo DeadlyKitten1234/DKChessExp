@@ -2,7 +2,7 @@
 const int AI::MAX_PLY_MATE = 256;
 const int AI::CHECK_BONUS = 125;
 const int AI::MAX_HISTORY = 120;
-const int AI::COUNTER_MOVE_BONUS = 48;
+const int AI::COUNTER_MOVE_BONUS = 192;
 const int AI::KILLER_BONUS = 350;
 const int AI::NULL_MOVE_DEFEND_BONUS = 75;
 const int AI::NULL_MOVE_MATE_DEFEND_BONUS = 225;
@@ -39,7 +39,7 @@ int16_t AI::startSearch(uint64_t timeToSearch) {
 		killers[i][0] = killers[i][1] = nullMove;
 	}
 	tt.newGen();
-	return iterativeDeepening(17);
+	return iterativeDeepening(127);
 }
 
 void AI::resetHistory() {
@@ -122,6 +122,15 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	const int8_t bitmaskCastling = pos->m_bitmaskCastling;//Used for undo-ing moves
 	const int8_t possibleEnPassant = pos->m_possibleEnPassant;//Used for undo-ing moves
 
+	//Mate distance pruning
+	if (!root) {
+		alpha = max<int16_t>(alpha, -pieceValue[KING] + 2 * movesHistory.size());
+		beta = min<int16_t>(beta, pieceValue[KING] - 2 * movesHistory.size());
+		if (alpha >= beta) {
+			return alpha;
+		}
+	}
+
 	int16_t eval = pos->evaluate();
 
 	int16_t moves[256];
@@ -131,7 +140,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		if (pos->friendlyInCheck) {
 			int8_t lastMoveEnd = getEndPos(movesHistory.top());
 			int* hh = &historyHeuristic[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd];
-			*hh += CHECK_BONUS + *hh * CHECK_BONUS / MAX_HISTORY;
+			*hh += pieceValue[PAWN] * 5/4 - *hh * pieceValue[PAWN] * 5/4 / MAX_HISTORY;
 			return -pieceValue[KING];
 		}
 		return 0;
@@ -299,7 +308,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	//ProbCut https://www.chessprogramming.org/ProbCut
 	int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
-	const int8_t probCutDepthR = 3 + depth * depth / 64;
+	const int8_t probCutDepthR = 3 + depth / 8;
 	if (!pvNode && depth > probCutDepthR && !abCloseToMate &&
 		!(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR)) {
 		for (int16_t i = 0; i < movesCnt; i++) {
@@ -342,7 +351,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				evalIncrease += pieceValue[getPromotionPiece(curMove)];
 			}
 			if (depth == 2 && eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
-				return eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN];
+				return eval;
 			}
 			if (depth == 1 && eval + evalIncrease + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
 				break;
@@ -363,6 +372,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//https://www.chessprogramming.org/Null_Window
 			inScout++;
 			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
+			
 			inScout--;
 			if (res > alpha && pvNode && beta - alpha > 1) {
 				res = -search<PV>(depth - 1, -beta, -alpha);
@@ -450,9 +460,6 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	//If even capturing a queen can't improve position
 	if (staticEval + pieceValue[QUEEN] + pieceValue[PAWN]/*safety margin*/ <= alpha) {
 		return alpha;
-	}
-	if (staticEval - pieceValue[QUEEN] - pieceValue[PAWN]/*safety margin*/ >= beta) {
-		return staticEval - pieceValue[QUEEN] - pieceValue[PAWN];
 	}
 	//Fail low means no move gives a score > alpha
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
@@ -585,16 +592,16 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 
 	int8_t bmAfterNullSt = (bestMoveAfterNull == nullMove ? -1 : getStartPos(bestMoveAfterNull));
 	int8_t bmAfterNullEnd = (bestMoveAfterNull == nullMove ? -1 : getEndPos(bestMoveAfterNull));
-	uint64_t nullDefenders[6] = { 0, 0, 0, 0, 0, 0 };
-	if (bestMoveAfterNull != nullMove) {
-		nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
-		nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
-		nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
-		nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
-		if (pos->m_blackToMove) { nullDefenders[PAWN] = pawnAttacks<0>(bmAfterNullEnd); }
-		else					{ nullDefenders[PAWN] = pawnAttacks<1>(bmAfterNullEnd); }
-		nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
-	}
+	//uint64_t nullDefenders[6] = { 0, 0, 0, 0, 0, 0 };
+	//if (bestMoveAfterNull != nullMove) {
+	//	nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
+	//	nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
+	//	nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
+	//	nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
+	//	if (pos->m_blackToMove) { nullDefenders[PAWN] = pawnAttacks<0>(bmAfterNullEnd); }
+	//	else					{ nullDefenders[PAWN] = pawnAttacks<1>(bmAfterNullEnd); }
+	//	nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
+	//}
 	bool nmIsBigCapture = 0;
 	if (bestMoveAfterNull != nullMove && pos->isCapture(bestMoveAfterNull)) {
 		const PieceType capturingType = pos->m_pieceOnTile[bmAfterNullEnd]->type;
@@ -681,9 +688,9 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 			//If escaping from opponent threat
 			if (stPos == bmAfterNullEnd) {
 				if (nmIsBigCapture) {
-					curGuess += pieceValue[pt] / 27;
+					curGuess += pieceValue[pt] / 7;
 				} else {
-					curGuess += pieceValue[pt] / 32;
+					curGuess += pieceValue[pt] / 8;
 				}
 			}
 			//Add history heuristic
