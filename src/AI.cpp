@@ -146,7 +146,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		depth--;
 	}
-	//Futility pruning; https://www.chessprogramming.org/Futility_Pruning
+	
+	//Futility pruning <https://www.chessprogramming.org/Futility_Pruning>
 	if (!pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
 		if (eval - pieceValue[BISHOP] * depth / 2 >= beta) {
 			return eval - pieceValue[BISHOP] * depth / 2;
@@ -155,7 +156,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			return alpha;
 		}
 	}
-	//Null move; https://www.chessprogramming.org/Null_Move_Pruning
+	
+	//Null move pruning <https://www.chessprogramming.org/Null_Move_Pruning>
 	int16_t bestMoveAfterNull = nullMove;
 	const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
 	bool mateIfNullMove = false;
@@ -254,12 +256,13 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 2;
+	//inScout impiles its also not a PV node
 	if (inScout && !abCloseToMate) {
 		int16_t curCutNodes = 0;
 		const int16_t movesToSearch = min<int16_t>(8, movesCnt), cutNodesToQuit = 2 + depth / 10;
 		for (int8_t i = 0; i < movesToSearch; i++) {
 			if (i != movesToSearch - 1) {
-				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+				prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
 			}
 			const int16_t curMove = moves[moveIndices[i]];
 			//Make move
@@ -289,7 +292,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (!pvNode && depth > probCutDepthR && !(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR) && !abCloseToMate) {
 		for (int16_t i = 0; i < movesCnt; i++) {
 			if (i != movesCnt - 1) {
-				_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+				prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
 			}
 			const int16_t curMove = moves[moveIndices[i]];
 			//Make move
@@ -314,7 +317,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move in tt
 		if (i != movesCnt - 1) {
-			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+			prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
 		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
@@ -415,6 +418,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			return alpha;
 		}
 	}
+	
 	if (root) {
 		pos->m_legalMovesCnt = movesCnt;
 	}
@@ -493,7 +497,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	for (int16_t i = 0; i < movesCnt; i++) {
 		//Prefetch next move
 		if (i != movesCnt - 1) {
-			_mm_prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal], _MM_HINT_T1);
+			prefetch<L1>((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
 		}
 		const int16_t curMove = moves[moveIndices[i]];
 		//If can't improve alpha, don't search move; This is (i think) delta pruning
@@ -561,7 +565,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	if (!foundTTEntry ||
 		(foundTTEntry && ttEntryRes->depth <= 0 && //Unless found a qsearch entry and
 		//we have exact or we have a better high bound
-			(!failLow || (ttEntryRes->boundType() == HighBound && ttEntryRes->eval > alpha)))) {
+		(!failLow || (ttEntryRes->boundType() == HighBound && ttEntryRes->eval > alpha)))) {
 
 		//Here can write high bound if failLow and exact otherwise, because 
 		//it only affect qsearch, because in main search we check if
@@ -585,7 +589,8 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 	//	nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
 	//	nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
 	//	nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
-	//	nullDefenders[PAWN]		= pawnAtt<!pos->m_blackToMove>(bmAfterNullEnd);
+	//	if (pos->m_blackToMove) { nullDefenders[PAWN] = pawnAttacks<0>(bmAfterNullEnd); }
+	//	else					{ nullDefenders[PAWN] = pawnAttacks<1>(bmAfterNullEnd); }
 	//	nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
 	//}
 	bool nmIsBigCapture = 0;

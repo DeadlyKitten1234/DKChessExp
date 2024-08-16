@@ -4,7 +4,6 @@
 #include "Clock.h"
 #include "misc.h"
 #include <iostream>
-#include <xmmintrin.h>//_mm_prefetch
 #include <algorithm>
 using std::max;
 using std::min;
