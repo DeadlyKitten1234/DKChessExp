@@ -70,5 +70,16 @@ private:
 	//<https://www.chessprogramming.org/Killer_Heuristic>
 	int16_t killers[128][2];
 	static const int KILLER_BONUS;
+	inline void updateKillers(int16_t newMove) {
+		if (killers[movesHistory.size()][0] == nullMove) {
+			killers[movesHistory.size()][0] = newMove;
+		}
+		else {
+			if (killers[movesHistory.size()][1] != nullMove) {
+				killers[movesHistory.size()][0] = killers[movesHistory.size()][1];
+			}
+			killers[movesHistory.size()][1] = newMove;
+		}
+	}
 
 };
