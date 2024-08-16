@@ -59,6 +59,26 @@ extern uint64_t shiftIndexToABlockersBitmask(const int idx, const uint64_t relev
 extern inline int getMagicIdx(const uint64_t bitmask, const int sq, const bool bishop);
 
 template<PieceType type>
+inline void prefetchAttacks(const int8_t sq, const uint64_t blockers) {
+	if constexpr (type == KNIGHT) {
+		prefetch((const char*)&knightMovesLookup[sq]);
+	}
+	if constexpr (type == KING) {
+		prefetch((const char*)&kingMovesLookup[sq]);
+	}
+	if constexpr (type == BISHOP) {
+		prefetch((const char*)bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)]);
+	}
+	if constexpr (type == ROOK) {
+		prefetch((const char*)rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)]);
+	}
+	if constexpr (type == QUEEN) {
+		prefetch((const char*)bishopMovesLookup[sq][getMagicIdx(blockers & bishopRelevantSq[sq], sq, 1)]);
+		prefetch((const char*)rookMovesLookup[sq][getMagicIdx(blockers & rookRelevantSq[sq], sq, 0)]);
+	}
+}
+
+template<PieceType type>
 inline uint64_t attacks(const int8_t sq, const uint64_t blockers) {
 	if constexpr (type == KNIGHT) {
 		return knightMovesLookup[sq];

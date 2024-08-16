@@ -235,6 +235,10 @@ inline int16_t generatePieceMoves(const Position& pos, int16_t* out, int16_t mov
 	const uint64_t allPcs = pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard;
 	while (pcsBitboard != 0) {
 		int8_t piecePos = getLSBPos(pcsBitboard);
+		if ((pcsBitboard & (pcsBitboard - 1)) != 0) {
+			prefetchAttacks<type>(getLSBPos(pcsBitboard & (pcsBitboard - 1)), allPcs);
+		}
+
 		uint64_t movesBitboard = attacks<type>(piecePos, allPcs) & ~firendlyPcsBitboard;
 		if (inCheck) {
 			movesBitboard &= tileBlocksCheck;
@@ -304,23 +308,6 @@ inline void getPinsAndChecks(const Position& pos) {
 			inCheck = 1;
 			tileBlocksCheck |= betweenBitboard[kingPos][piecePos];
 			tileBlocksCheck |= 1ULL << piecePos;
-			//Save some work in generateKingMove; !calcAttackedTiles, 
-			//because we are going to do it anyway if calcAttackedTiles
-			if (!calcAttackedTiles && betweenBitboard[kingPos][piecePos] != 0) {
-				if (diagBB_ & (1ULL << piecePos)) {
-					if (getDiagM(kingPos) == getDiagM(piecePos)) {
-						tileAttacked |= mainDiagBitmask[getDiagM(kingPos)];
-					} else {
-						tileAttacked |= scndDiagBitmask[getDiagS(kingPos)];
-					}
-				} else {
-					if (getX(kingPos) == getX(piecePos)) {
-						tileAttacked |= colBitmask[getX(kingPos)];
-					} else {
-						tileAttacked |= rowBitmask[getY(kingPos)];
-					}
-				}
-			}
 		} else {
 			//If only one piece in between sliding piece and king
 			if ((pcsBetween & pcsBetween - 1) == 0) {
@@ -360,8 +347,11 @@ inline void setChecksToEnemyKing(const Position& pos) {
 	checks[BISHOP]	= attacks<BISHOP>(enemyKingPos, allPcs);
 	checks[KNIGHT]	= attacks<KNIGHT>(enemyKingPos, allPcs);
 	checks[ROOK]	= attacks<ROOK>(enemyKingPos, allPcs);
-	checks[PAWN]	= pawnAtt<!pos.m_blackToMove>(enemyKingPos);
-	checks[QUEEN]	= checks[BISHOP] | checks[ROOK];
+	checks[QUEEN] = checks[BISHOP] | checks[ROOK];
+	checks[PAWN] = 0;
+	//if (pos.m_blackToMove)	{ checks[PAWN] = pawnAttacks<0>(enemyKingPos); }
+	//else					{ checks[PAWN] = pawnAttacks<1>(enemyKingPos); }
+
 }
 
 //Returns size

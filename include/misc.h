@@ -1,5 +1,6 @@
 #pragma once
 #include <cinttypes>
+#include <xmmintrin.h>//_mm_prefetch
 
 inline int8_t getX(const int8_t pos) {
 	return (pos & 0b111);
@@ -19,35 +20,17 @@ inline int8_t getLSBPos(const uint64_t bitmask) {
 	_BitScanForward64(&idx, bitmask);
 	return idx;
 }
-
 inline int8_t floorLog2(int num) {
 	if (num < 0) {
 		return 0;
 	}
-	int8_t ans = 0;
-	if (num >> 16) {
-		num >>= 16;
-		ans |= 16;
-	}
-	if (num >> 8) {
-		num >>= 8;
-		ans |= 8;
-	}
-	if (num >> 4) {
-		num >>= 4;
-		ans |= 4;
-	}
-	if (num >> 2) {
-		num >>= 2;
-		ans |= 2;
-	}
-	if (num >> 1) {
-		num >>= 1;
-		ans++;
-	}
-	return ans;
+	num |= num >> 1;
+	num |= num >> 2;
+	num |= num >> 4;
+	num |= num >> 8;
+	num |= num >> 16;
+	return getLSBPos(num);
 }
-
 inline int16_t fastSqrt(int x) {
 	//Source: https://en.wikipedia.org/wiki/Fast_inverse_square_root
 	//Perform some magic with the bits and get the result we want
@@ -73,7 +56,6 @@ inline int16_t fastSqrt(int x) {
 	}
 	return 1/y;
 }
-
 inline int8_t countOnes(uint64_t bitmask) {
 	int8_t ans = 0;
 	while (bitmask) {
@@ -85,6 +67,17 @@ inline int8_t countOnes(uint64_t bitmask) {
 inline uint64_t shift(uint64_t number, int8_t amount) {
 	return (amount < 0 ? number >> (-amount) : number << amount);
 }
+
+enum CacheLevel : int8_t {
+	L0 = 0,
+	L1 = 1,
+	L2 = 2
+};
+template<CacheLevel cacheLevel = L0>
+inline void prefetch(const char* adress) {
+	_mm_prefetch(adress, _MM_HINT_T0 + cacheLevel);
+}
+
 void reverseFenPosition(char* fen);
 
 class RandNumGen {
