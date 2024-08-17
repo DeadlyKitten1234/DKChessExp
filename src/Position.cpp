@@ -163,7 +163,7 @@ void Position::readFEN(const char* fen) {
 		}
 	}
 	if (!(fen[i] == ' ' || fen[i] == '-')) {
-		m_possibleEnPassant = 0;
+		m_possibleEnPassant = -1;
 	}
 	for (i = i; fen[i]; i++) {
 		if (fen[i] == ' ') {
@@ -175,6 +175,17 @@ void Position::readFEN(const char* fen) {
 		}
 		if ('1' <= fen[i] && fen[i] <= '8') {
 			m_possibleEnPassant |= (fen[i] - '1') << 3;
+		}
+		if (m_possibleEnPassant != -1) {
+			if (getY(m_possibleEnPassant) != 2 && getY(m_possibleEnPassant) != 5) {
+				m_possibleEnPassant = -1;
+			}
+
+			if (m_pieceOnTile[m_possibleEnPassant + (m_blackToMove ? 8 : -8)] == nullptr ||
+				m_pieceOnTile[m_possibleEnPassant + (m_blackToMove ? 8 : -8)]->type != PAWN) {
+				//Invalid en passant
+				m_possibleEnPassant = -1;
+			}
 		}
 	}
 	//For now don't read moves since pawn push and total moves
