@@ -147,9 +147,18 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 	const bool abCloseToMate =	abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
 								abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
-	//Razoring
+
+	//Razoring <https://www.chessprogramming.org/Razoring>
+	//Taken from stockfish
+	if (!abCloseToMate&& eval < alpha - 319 - 151 * (depth * depth)) {
+		int16_t value = searchOnlyCaptures(alpha - 1, alpha);
+		if (value < alpha) {
+			return alpha;
+		}
+	}
+	//Limited razoring
 	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] * 2 + pvNode * 35 <= alpha &&
-		(pos->m_blackToMove ? pos->m_whiteTotalPiecesCnt : pos->m_blackTotalPiecesCnt) >= 3) {
+		(pos->m_blackToMove ? pos->m_whiteTotalPiecesCnt : pos->m_blackTotalPiecesCnt) > 3) {
 
 		depth--;
 	}
@@ -158,9 +167,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (!pos->friendlyInCheck && depth <= 9 && !abCloseToMate) {
 		if (eval - pieceValue[PAWN] * depth / 2 >= beta) {
 			return (eval + beta) / 2;
-		}
-		if (eval + pieceValue[BISHOP] * depth / 2 <= alpha) {
-			return alpha;
 		}
 	}
 	
@@ -216,9 +222,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					//Update hh
-					int* hh = &historyHeuristic[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd];
-					int clampedBonus = -std::clamp((depth - nullMoveDepthR) * (depth - nullMoveDepthR), -MAX_HISTORY, MAX_HISTORY);
-					*hh += (clampedBonus + *hh * clampedBonus / MAX_HISTORY) / 5;
+					if (!lastWasNull) {
+						int* hh = &historyHeuristic[!pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd];
+						int clampedBonus = -std::clamp((depth - nullMoveDepthR) * (depth - nullMoveDepthR), -MAX_HISTORY, MAX_HISTORY);
+						*hh += (clampedBonus + *hh * clampedBonus / MAX_HISTORY) / 5;
+					}
 					return verification;
 				}
 			}
@@ -392,19 +400,30 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		const int16_t curMove = moves[moveIndices[i]];
 		if (searchOnlyEp && !pos->isEnPassant(curMove)) { continue; }
 		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
-		if (depth <= 2) {
-			int16_t evalIncrease = 0;
-			if (pos->isCapture(curMove)) {
-				evalIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
-			}
-			if (getPromotionPiece(curMove) != PieceType::UNDEF) {
-				evalIncrease += pieceValue[getPromotionPiece(curMove)];
-			}
-			if (depth == 2 && eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
-				return eval;
-			}
-			if (depth == 1 && eval + evalIncrease + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
-				break;
+		int16_t evalIncrease = 0;
+		if (pos->isCapture(curMove)) {
+			evalIncrease += pieceValue[pos->m_pieceOnTile[getEndPos(curMove)]->type];
+		}
+		if (getPromotionPiece(curMove) != PieceType::UNDEF) {
+			evalIncrease += pieceValue[getPromotionPiece(curMove)];
+		}
+		if (depth == 2 && eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
+			return eval + evalIncrease - pieceValue[QUEEN];
+		}
+		if (depth == 1 && eval + evalIncrease + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
+			break;
+		}
+
+		//Taken from stockfish and added conditions for hh, cMove and killers
+		if (!pos->friendlyInCheck && depth <= 8 && !abCloseToMate &&
+			eval + evalIncrease + pieceValue[PAWN] * depth / 2 + (bestValue < eval - 27 ? 54 : 27) <= alpha) {
+			int const hh = historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[getStartPos(curMove)]->type][getEndPos(curMove)];
+			const int8_t lastMoveEnd = getEndPos(movesHistory.top());
+			int const cMove = counterMove[pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd];
+			if (hh <= MAX_HISTORY / 8 && curMove != cMove && 
+				curMove != killers[movesHistory.size()][0] && curMove != killers[movesHistory.size()][1]) {
+
+				continue;
 			}
 		}
 
