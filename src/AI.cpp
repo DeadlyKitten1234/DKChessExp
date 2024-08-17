@@ -165,6 +165,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 	
 	prefetch((const char*)&tt.chunk[pos->zHash >> tt.shRVal].entry);
+	//Prefetch if no en passant
+	if (pos->m_possibleEnPassant != -1) {
+		prefetch((const char*)&tt.chunk[(pos->getZHashNoEp()) >> tt.shRVal].entry);
+	}
 	
 	//Null move pruning <https://www.chessprogramming.org/Null_Move_Pruning>
 	int16_t bestMoveAfterNull = nullMove;
@@ -228,13 +232,14 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	//Fail low means no move gives a score > alpha
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1;
-	int16_t bestValue = -pieceValue[KING];
+	int16_t bestValue = -pieceValue[KING], curBestMove = nullMove;
 
-	bool foundTTEntry = 0;
 	//Probe tt
-	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
-	int16_t curBestMove = nullMove;
+	bool foundTTEntry = 0, foundTTEntryNoEp = 0, searchOnlyEp = 0;
+	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry), *ttEntryNoEp = nullptr;
 	int16_t ttBestMove = (foundTTEntry ? ttEntryRes->bestMove : nullMove);
+	//Probe tt as if there was no ep
+	if (pos->m_possibleEnPassant != -1) { ttEntryNoEp = tt.find(pos->getZHashNoEp(), foundTTEntryNoEp); }
 	if (foundTTEntry && ttEntryRes->depth >= depth) {
 		//Renew gen (make it more valuable when deciding which entry to overwrite)
 		ttEntryRes->setGen(tt.gen);
@@ -265,10 +270,47 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			if (root) {
 				bestMove = ttEntryRes->bestMove;
 			}
-			return ttEntryRes->eval;
+			return max(alpha, ttEntryRes->eval);
+		}
+	}
+	if (pos->m_possibleEnPassant != -1 && foundTTEntryNoEp && ttEntryNoEp->depth >= depth) {
+		//Renew gen (make it more valuable when deciding which entry to overwrite)
+		ttEntryNoEp->setGen(tt.gen);
+		//Lower bound
+		if (ttEntryNoEp->boundType() == BoundType::LowBound) {
+			if (ttEntryNoEp->eval > alpha || ttEntryNoEp->eval >= beta) {
+				if (root) { bestMove = ttEntryNoEp->bestMove; }
+				curBestMove = ttEntryNoEp->bestMove;
+				failLow = 0;
+			}
+			if (ttEntryNoEp->eval >= beta) {
+				return ttEntryNoEp->eval;
+			}
+			alpha = max(alpha, ttEntryNoEp->eval);
+			eval = max(eval, ttEntryNoEp->eval);
+		}
+		//Higher bound
+		if (ttEntryNoEp->boundType() == BoundType::HighBound) {
+			//We have guaranteed a better position
+			if (ttEntryNoEp->eval <= alpha) {
+				searchOnlyEp = 1;
+			}
+		}
+		//Exact bound
+		if (ttEntryNoEp->boundType() == BoundType::Exact) {
+			if (root) { bestMove = ttEntryNoEp->bestMove; }
+			if (ttEntryNoEp->eval >= beta) { return ttEntryNoEp->eval; }
+			alpha = max(alpha, ttEntryNoEp->eval);
+			searchOnlyEp = 1;
 		}
 	}
 	
+	if (!pos->isEnPassant(ttBestMove) && foundTTEntryNoEp && ttEntryNoEp->bestMove != nullMove &&
+		ttEntryNoEp->depth > (ttEntryRes->depth * foundTTEntry)) {
+		
+		ttBestMove = ttEntryNoEp->bestMove;
+	}
+
 	int16_t moveIndices[256];
 	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, mateIfNullMove);
 
@@ -280,6 +322,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		const int16_t movesToSearch = min<int16_t>(8, movesCnt), cutNodesToQuit = 2 + depth / 10;
 		for (int8_t i = 0; i < movesToSearch; i++) {
 			const int16_t curMove = moves[moveIndices[i]];
+			if (searchOnlyEp && !pos->isEnPassant(curMove)) { continue; }
 			//Make move
 			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 			movesHistory.push(curMove);
@@ -300,6 +343,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 						*hh += clampedBonus - *hh * clampedBonus / MAX_HISTORY;
 					}
 					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
+					if (pos->m_possibleEnPassant != -1 && !pos->isEnPassant(curMove)) {
+						ttEntryNoEp->init(pos->getZHashNoEp(), curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
+					}
 					return res;
 				}
 			}
@@ -313,6 +359,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		!(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR)) {
 		for (int16_t i = 0; i < movesCnt; i++) {
 			const int16_t curMove = moves[moveIndices[i]];
+			if (searchOnlyEp && !pos->isEnPassant(curMove)) { continue; }
 			//Make move
 			const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
 			movesHistory.push(curMove);
@@ -332,15 +379,18 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 					*hh += clampedBonus - *hh * clampedBonus / MAX_HISTORY;
 				}
 				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
+				if (pos->m_possibleEnPassant != -1 && !pos->isEnPassant(curMove)) {
+					ttEntryNoEp->init(pos->getZHashNoEp(), curMove, res, depth - probCutDepthR, tt.gen, LowBound);
+				}
 				return res;
 			}
 		}
 	}
 
-
 	//Search moves
 	for (int16_t i = 0; i < movesCnt; i++) {
 		const int16_t curMove = moves[moveIndices[i]];
+		if (searchOnlyEp && !pos->isEnPassant(curMove)) { continue; }
 		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
 		if (depth <= 2) {
 			int16_t evalIncrease = 0;
@@ -395,6 +445,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		//Alpha-beta cutoff
 		if (res >= beta) {
 			ttEntryRes->init(pos->zHash, curMove, res, depth, tt.gen, BoundType::LowBound);
+			if (pos->m_possibleEnPassant != -1 && !pos->isEnPassant(curMove)) {
+				ttEntryNoEp->init(pos->getZHashNoEp(), curMove, res, depth, tt.gen, BoundType::LowBound);
+			}
 			if (root) {
 				pos->m_legalMovesCnt = movesCnt;
 				bestMove = curMove;
@@ -442,6 +495,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		curBestMove = ttEntryRes->bestMove;
 	}
 	ttEntryRes->init(pos->zHash, curBestMove, bestValue, depth, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
+	if (pos->m_possibleEnPassant != -1 && !(pos->isEnPassant(curBestMove))) {
+		ttEntryNoEp->init(pos->getZHashNoEp(), curBestMove, bestValue, depth, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
+	}
 	return alpha;
 }
 
@@ -489,7 +545,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		}
 		//If exact bound => return eval
 		if (ttEntryRes->boundType() == BoundType::Exact) {
-			return ttEntryRes->eval;
+			return max(alpha, ttEntryRes->eval);
 		}
 	}
 
@@ -654,17 +710,18 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 
 		//Favor captures
 		if (pos->isCapture(curMove)) {
+			int8_t capturePos = endPos + (pos->isEnPassant(curMove) ? (pos->m_blackToMove ? 8 : -8) : 0);
 			//13 * capturedPieceVal to prioritise captures before non-captures and 
 			//to incentivise capturing more valuable pieces; We chosse 13, because
 			//13 is the lowest number above how much pawns a queen is worth
 
 			//pieceValue[KING] = inf; so king captures would be placed last; to prevent this add if (pt == KING)
 			if (pt == KING) {
-				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[QUEEN] * 3 / 2;
+				curGuess += 13 * pieceValue[pos->m_pieceOnTile[capturePos]->type] - pieceValue[QUEEN] * 3 / 2;
 			} else {
-				curGuess += 13 * pieceValue[pos->m_pieceOnTile[endPos]->type] - pieceValue[pt];
+				curGuess += 13 * pieceValue[pos->m_pieceOnTile[capturePos]->type] - pieceValue[pt];
 			}
-			if (endPos == bmAfterNullSt) {
+			if (capturePos == bmAfterNullSt) {
 				curGuess += NULL_MOVE_DEFEND_BONUS * 4;
 			}
 			quiet = 0;

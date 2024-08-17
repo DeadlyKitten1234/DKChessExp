@@ -16,6 +16,7 @@ public:
 	//stTile == -1 means revert capture; endTile == -1 means make capture
 	inline void updateDynamicVars(const PieceType type, const int8_t stTile, int8_t endTile);
 	uint64_t getZHashIfMoveMade(const int16_t move) const;
+	uint64_t getZHashNoEp() const;
 	//@returns Captured piece idx
 	int8_t makeMove(int16_t move);
 	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
@@ -23,9 +24,9 @@ public:
 	void undoNullMove(int8_t possibleEnPassant_);
 
 	template<bool capturesOnly>
-	void updateLegalMoves(const bool calculateChecks = 0);
+	void updateLegalMoves(const bool calculateChecks = false);
 	template<bool capturesOnly>
-	void updateLegalMoves(int16_t out[256], const bool calculateChecks = 0);
+	void updateLegalMoves(int16_t out[256], const bool calculateChecks = false);
 	inline int16_t evaluate();
 
 	inline bool hasNonPawnPiece(const bool black) const {
@@ -36,6 +37,9 @@ public:
 	}
 	inline bool isCapture(const int16_t move) const {
 		return (m_pieceOnTile[getEndPos(move)] != nullptr);
+	}
+	inline bool isEnPassant(const int16_t move) const {
+		return (move == nullMove ? 0 : (m_pieceOnTile[getStartPos(move)]->type == PAWN && getEndPos(move) == m_possibleEnPassant));
 	}
 
 	static const char* m_startFEN;

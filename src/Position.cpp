@@ -256,6 +256,10 @@ uint64_t Position::getZHashIfMoveMade(const int16_t move) const {
 	return ans;
 }
 
+uint64_t Position::getZHashNoEp() const {
+	return zHash ^ (m_possibleEnPassant == -1 ? 0 : hashNumsEp[getX(m_possibleEnPassant)]);
+}
+
 int8_t Position::makeMove(int16_t move) {
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
 	//Update bitboards, bonuses ans zobrist hash
@@ -348,8 +352,16 @@ int8_t Position::makeMove(int16_t move) {
 
 	//Update En Passant target
 	int8_t begginingEpTile = m_possibleEnPassant;
-	if (m_pieceOnTile[stTile]->type == PieceType::PAWN && abs(getY(stTile) - getY(endTile)) != 1) {
-		m_possibleEnPassant = (stTile + endTile) / 2;
+	if (m_pieceOnTile[stTile]->type == PieceType::PAWN && abs(stTile - endTile) == 16) {
+		const uint64_t enemyPawnsBB = (m_blackToMove ? m_whiteBitboards : m_blackBitboards)[PAWN];
+		uint64_t epPawnsMask = 0;
+		if (getX(endTile) != 0) { epPawnsMask |= (1ULL << (endTile - 1)); }
+		if (getX(endTile) != 7) { epPawnsMask |= (1ULL << (endTile + 1)); }
+		if (epPawnsMask & enemyPawnsBB) {
+			m_possibleEnPassant = (stTile + endTile) / 2;
+		} else {
+			m_possibleEnPassant = -1;
+		}
 	} else {
 		m_possibleEnPassant = -1;
 	}
