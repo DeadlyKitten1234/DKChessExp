@@ -22,6 +22,22 @@ public:
 		return (((key_ >> 16) & 0xFFFF) == key1) && ((key_ & 0xFFFF) == key2);
 	}
 	inline void init(uint64_t key_, int16_t bestMove_, int16_t eval_, int8_t depth_, uint8_t gen_, BoundType type_) {
+		if (sameKey(key_) && depth_ + 3 * (type_ == BoundType::Exact) < depth + 2 * (boundType() == BoundType::Exact)) {
+			return;
+		}
+		if (sameKey(key_) && depth == depth_) {
+			if (type_ == HighBound && boundType() == HighBound && eval_ >= eval) {
+				return;
+			}
+			if (type_ == LowBound && boundType() == LowBound && eval_ <= eval) {
+				return;
+			}
+			//if (boundType() == BoundType::Exact) {
+			////	eval = eval_;
+			////	setBoundType(type_);
+			//	return;
+			//}
+		}
 		key1 = (key_ >> 16) & 0xFFFF;
 		key2 = key_ & 0xFFFF;
 		bestMove = bestMove_;
@@ -34,10 +50,10 @@ public:
 	inline int16_t calcValue() const {
 		//Here we use the genAndType arrangement, where the generation is 
 		//already shifted left 3 => weigh generation 8 times as much as depth
-		return (genAndType & 0xF8) + depth + 3 * (boundType() == BoundType::Exact);
+		return (genAndType & 0xF8) + depth + 2 * (boundType() == BoundType::Exact);
 	}
 
-	//malloc allocates 12 bytes for optimisation if a int32_t is used?
+	//malloc allocates 12 bytes for optimization? if a int32_t is used
 	//Howerver we want class to take up 10 bytes, so key is split into 2 * int16_t
 	//Note: we don't use the full 64 bit key, because in tt first x=log2(sz)+15 bits are used
 	//as index and here we use last 32 bits for confirmation key. Because zobrist hashing has
