@@ -25,7 +25,7 @@ public:
 
 	void initPos(Position* pos_);
 	//@returns Eval
-	int16_t startSearch(uint64_t timeToSearch);
+	int16_t startSearch(uint64_t timeToSearch, bool printRes = true);
 	int16_t bestMove;
 
 private:
@@ -35,7 +35,7 @@ private:
 	Position* pos;
 
 	//@returns Eval
-	int16_t iterativeDeepening(int8_t depth);
+	int16_t iterativeDeepening(int8_t depth, bool printRes = true);
 	//@returns Eval
 	template<NodeType nodeType>
 	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
