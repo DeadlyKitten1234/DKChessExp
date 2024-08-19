@@ -1,5 +1,7 @@
+#include "Position.h"
 #include "TestManager.h"
 #include "Move.h"
+#include <string>
 #include <SDL.h>
 #include <iostream>
 #include <fstream>
@@ -25,7 +27,7 @@ void initTests() {
 	return;
 }
 
-void runTests() {
+void runPreftTests() {
     int globalStTime = SDL_GetTicks();
 	Position pos = Position();
     long long totalPositions = 0;
@@ -65,13 +67,13 @@ long long perft(Position& pos, int depth, bool root) {
             cout << increase << "\n";
         }
         ans += increase;
-        pos.undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant);
+        pos.undoMove(moves[i], capturedPieceIdx, bitmaskCastling, possibleEnPassant, 0);
     }
     pos.m_legalMovesCnt = cnt;
     return ans;
 }
 
-void runDebuggingTest(Position* pos) {
+void runDebuggingPerft(Position* pos) {
     ifstream read;
     read.open("assets/tests/PerftTests/DebuggingTest.txt");
     int depth;
@@ -91,4 +93,102 @@ void runPerft(Position& pos, int depth) {
     long long res = perft(pos, depth);
     cout << "Nodes count: " << res;
     cout << "\nTime: " << SDL_GetTicks() - curTime << "\nSpeed: " << res / (SDL_GetTicks() - curTime) << " leaves/ms\n";
+}
+
+#include "AI.h"
+#include "AICompare.h"
+
+void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
+	int wins = 0, draws = 0, loses = 0;
+	std::ifstream inputS;
+	std::ofstream out("assets/tests/Results.txt");
+	inputS.open("assets/tests/TestPositions/TestPositions.txt");
+	RandNumGen rng(3141592653ULL);
+	string fen = "";
+	AI aiGood;
+	AICompare aiBad;
+	uint64_t repHistory[1024];
+	bool twice[1024];
+	for (int c = 0; c < numberOfGames; c++) {
+		tt.clear();
+		aiBad.ttCmp.clear();
+		int repHistorySz = 0;
+		for (int i = 0; i < 1024; i++) {
+			repHistory[i] = twice[i] = 0;
+		}
+		int skipForward = rng.rand() % 5;
+		for (int i = 0; i <= skipForward; i++) {
+			getline(inputS, fen);
+			inputS >> std::ws;
+		}
+		pos->readFEN(fen.c_str());
+		world.initPos(pos);
+
+		aiGood.initPos(pos);
+		aiBad.initPos(pos);
+
+		bool goodToMove = !pos->m_blackToMove;
+		int move50count = 0;
+		while (1) {
+			if (goodToMove) {
+				aiGood.bestMove = nullMove;
+				aiGood.startSearch(timeToMove, 0);
+				if (aiGood.bestMove == nullMove) {
+					loses++;
+					cout << 'L';
+					break;
+				}
+				move50count++;
+				if (pos->isCapture(aiGood.bestMove) || pos->m_pieceOnTile[getStartPos(aiGood.bestMove)]) {
+					move50count = 0;
+				}
+				pos->makeMove(aiGood.bestMove);
+			} else {
+				aiBad.bestMove = nullMove;
+				aiBad.startSearch(timeToMove);
+				if (aiBad.bestMove == nullMove) {
+					cout << 'W';
+					wins++;
+					break;
+				}
+				move50count++;
+				if (pos->isCapture(aiBad.bestMove) || pos->m_pieceOnTile[getStartPos(aiBad.bestMove)]) {
+					move50count = 0;
+				}
+				pos->makeMove(aiBad.bestMove);
+			}
+			goodToMove = !goodToMove;
+
+			if (pos->drawMan.checkForRep()) {
+				cout << "D";//Draw by rep
+				draws++;
+				break;
+			}
+			if (pos->drawMan.checkForRule50()) {
+				cout << "D50";//Draw by 50 move rule
+				draws++;
+				break;
+			}
+			pos->updateLegalMoves<0>(false);
+			if (pos->m_legalMovesCnt == 0 && !pos->friendlyInCheck) {
+				cout << "Ds";//Draw by stalemate
+				draws++;
+				break;
+			}
+			if (((pos->m_whiteTotalPiecesCnt == 2 && (pos->m_whitePiecesCnt[BISHOP] == 1 || pos->m_whitePiecesCnt[KNIGHT] == 1)) ||
+				pos->m_whiteTotalPiecesCnt == 1) &&
+				((pos->m_blackTotalPiecesCnt == 2 && (pos->m_blackPiecesCnt[BISHOP] == 1 || pos->m_blackPiecesCnt[KNIGHT] == 1)) ||
+				pos->m_blackTotalPiecesCnt == 1)) {
+				cout << "Di";//Draw by insufficient material
+				draws++;
+				break;
+			}
+			world.draw();
+			world.m_input.getInput();
+		}
+		//Used for backup if someting goes wrong
+		out << wins << ' ' << draws << ' ' << loses << '\n';
+	}
+	std::cout << "Wins: " << wins << "; Draws: " << draws << "; Loses: " << loses << '\n';
+	delete pos;
 }

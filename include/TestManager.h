@@ -1,7 +1,9 @@
 #pragma once
 #include "Position.h"
+#include "World.h"
 #include <cinttypes>
 using std::int8_t;
+using std::string;
 
 class PerftTest {
 public:
@@ -35,7 +37,9 @@ extern int8_t testsCnt;
 extern PerftTest perftTests[100];
 
 extern void initTests();
-extern void runTests();
-extern void runDebuggingTest(Position* worldPos = nullptr);
+extern void runPreftTests();
+extern void runDebuggingPerft(Position* worldPos = nullptr);
 extern long long perft(Position& pos, int depth, bool root = 1);
 extern void runPerft(Position& pos, int depth);
+
+extern void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove);
