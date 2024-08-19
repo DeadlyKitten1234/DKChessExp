@@ -43,6 +43,10 @@ public:
 		if (m_pieceOnTile[getStartPos(move)] == nullptr) { return false; }
 		return (move == nullMove ? 0 : (m_pieceOnTile[getStartPos(move)]->type == PAWN && getEndPos(move) == m_possibleEnPassant));
 	}
+	inline bool hasInsufMaterial(const bool black) const {
+		return drawMan.insufMaterial((black ? m_blackTotalPiecesCnt : m_whiteTotalPiecesCnt), (black ? m_blackPiecesCnt : m_whitePiecesCnt));
+	}
+	PieceType highestPiece(const bool black) const;
 
 	static const char* m_startFEN;
 
@@ -184,6 +188,16 @@ inline int16_t Position::evaluate() {
 	eval += forceKingToEdgeEval<0>() - forceKingToEdgeEval<1>();
 	return eval * (m_blackToMove ? -1 : 1);
 
+}
+
+inline PieceType Position::highestPiece(const bool black) const {
+	const int8_t* frPcs = (black ? m_blackPiecesCnt : m_whitePiecesCnt);
+	if (frPcs[QUEEN]) { return QUEEN; }
+	if (frPcs[ROOK]) { return ROOK; }
+	if (frPcs[BISHOP]) { return BISHOP; }
+	if (frPcs[KNIGHT]) { return KNIGHT; }
+	if (frPcs[PAWN]) { return PAWN; }
+	return UNDEF;
 }
 
 template<bool blackPerspective>
