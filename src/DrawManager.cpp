@@ -1,4 +1,5 @@
 #include "DrawManager.h"
+#include "Piece.h"
 
 DrawManager::DrawManager() {
 	repHistory = new uint64_t[1024]();
@@ -16,7 +17,7 @@ void DrawManager::addGameState(uint64_t zHash) {
 	repHistory[repHistorySz++] = zHash;
 }
 
-bool DrawManager::checkForRep() {
+bool DrawManager::checkForRep() const {
 	if (repHistorySz <= 5) {
 		return false;
 	}
@@ -30,6 +31,17 @@ bool DrawManager::checkForRep() {
 			}
 			foundOnce = true;
 		}
+	}
+	return false;
+}
+
+bool DrawManager::insufMaterial(int8_t totalPcsCnt, int8_t* piecesCnt) const {
+	if (totalPcsCnt == 1) {//Only king
+		return true;
+	}
+	//King and bishop/knight
+	if (totalPcsCnt == 2 && (piecesCnt[BISHOP] || piecesCnt[KNIGHT])) {
+		return true;
 	}
 	return false;
 }

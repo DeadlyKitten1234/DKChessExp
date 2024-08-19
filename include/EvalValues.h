@@ -5,7 +5,7 @@
 using std::max;
 
 //Values(except king) taken from Stockfish and rescaled so pawn is 100 points
-constexpr int16_t pieceValue[6] = { /*King value: INF*/30000, 1220, 400, 375, 610, 100 };
+constexpr int16_t pieceValue[7] = { /*King value: INF*/30000, 1220, 400, 375, 610, 100, /*UNDEF value*/0 };
 
 //Values taken from https://www.chessprogramming.org/Simplified_Evaluation_Function
 //IMPORTANT: These values are formated like we see the board; But to the computer, 

@@ -117,6 +117,23 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	if (Clock::now() >= searchEndTime) {
 		return 0;
 	}
+	//Handle draws
+	if (pos->drawMan.checkForRule50()) {
+		return 0;
+	}
+	if (pos->drawMan.checkForRep()) {
+		return 0;
+	}
+	if (pos->hasInsufMaterial(pos->m_blackToMove)) {
+		if (0 <= alpha) {
+			return alpha;
+		}
+		beta = max<int16_t>(beta, 0);
+		if (pos->hasInsufMaterial(!pos->m_blackToMove)) {
+			return 0;
+		}
+	}
+	//qsearch
 	if (depth <= 0) {
 		return searchOnlyCaptures(alpha, beta);
 	}
@@ -148,6 +165,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 	pos->updateLegalMoves<0>(moves, true);
 	movesCnt = pos->m_legalMovesCnt;
+	//Handle mate and stalemate
 	if (movesCnt == 0) {
 		if (pos->friendlyInCheck) {
 			if (movesHistory.size() != 0 && movesHistory.top() != nullMove) {
@@ -159,12 +177,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 		return 0;
 	}
-	if (pos->drawMan.checkForRule50()) {
-		return 0;
-	}
-	if (pos->drawMan.checkForRep()) {
-		return 0;
-	}
+	prefetch((const char*)&tt.chunk[pos->zHash >> tt.shRVal].entry);
 
 	//Razoring <https://www.chessprogramming.org/Razoring>
 	//Taken from stockfish
@@ -186,12 +199,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		if (eval - pieceValue[PAWN] * depth / 2 >= beta) {
 			return (eval + beta) / 2;
 		}
-	}
-	
-	prefetch((const char*)&tt.chunk[pos->zHash >> tt.shRVal].entry);
-	//Prefetch if no en passant
-	if (pos->m_possibleEnPassant != -1) {
-		prefetch((const char*)&tt.chunk[(pos->getZHashNoEp()) >> tt.shRVal].entry);
 	}
 	
 	//Null move pruning <https://www.chessprogramming.org/Null_Move_Pruning>
@@ -328,10 +335,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	//ProbCut https://www.chessprogramming.org/ProbCut
-	int16_t probCutBeta = beta + 2 * pieceValue[PAWN];
-	const int8_t probCutDepthR = 3 + depth / 8;
+	int16_t probCutBeta = beta + 87;
+	const int8_t probCutDepthR = 3;
 	if (!pvNode && depth > probCutDepthR && !abCloseToMate &&
-		!(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR)) {
+		!(foundTTEntry && ttEntryRes->depth >= depth - probCutDepthR && ttEntryRes->eval < probCutBeta)) {
 		for (int16_t i = 0; i < movesCnt; i++) {
 			const int16_t curMove = moves[moveIndices[i]];
 			//Make move
@@ -369,8 +376,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		if (getPromotionPiece(curMove) != PieceType::UNDEF) {
 			evalIncrease += pieceValue[getPromotionPiece(curMove)];
 		}
-		if (depth == 2 && eval + evalIncrease - pieceValue[QUEEN] - 2 * pieceValue[PAWN]/*safety margin*/ >= beta) {
-			return eval + evalIncrease - pieceValue[QUEEN];
+		if (depth == 2 && eval + evalIncrease - pieceValue[pos->highestPiece(pos->m_blackToMove)] - pieceValue[PAWN]/*safety margin*/ >= beta) {
+			return eval + evalIncrease - pieceValue[pos->highestPiece(pos->m_blackToMove)];
 		}
 		if (depth == 1 && eval + evalIncrease + 2 * pieceValue[PAWN]/*safety margin*/ <= alpha) {
 			break;
@@ -488,8 +495,8 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	if (staticEval >= beta) {
 		return staticEval;
 	}
-	//If even capturing a queen can't improve position
-	if (staticEval + pieceValue[QUEEN] + pieceValue[PAWN]/*safety margin*/ <= alpha) {
+	//If even capturing a opponent's highest pieces can't improve position
+	if (staticEval + pieceValue[pos->highestPiece(!pos->m_blackToMove)] + pieceValue[PAWN]/*safety margin*/ <= alpha) {
 		return alpha;
 	}
 	//Fail low means no move gives a score > alpha
