@@ -52,6 +52,9 @@ private:
 	Stack<int16_t> movesHistory;
 	static const int CHECK_BONUS;
 
+	int16_t rootMovesEval[256];
+	int16_t rootMoveIndices[256];
+
 	int inScout;
 
 	//<https://www.chessprogramming.org/History_Heuristic>

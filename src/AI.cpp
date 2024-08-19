@@ -77,17 +77,46 @@ void AI::updateHistoryNewSearch() {
 
 #include <iomanip>//setw() when outputing info
 inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
+	bool foundRootInTT = false;
+	TTEntry* ttRoot = tt.find(pos->zHash, foundRootInTT);
+
+	int16_t rootMoves[256], rootMovesCnt = 0, alpha, beta;
+	for (int i = 0; i < 256; i++) {
+		rootMoves[i] = nullMove;
+		rootMovesEval[i] = -pieceValue[KING];
+		rootMoveIndices[i] = i;
+	}
+	pos->updateLegalMoves<0>(rootMoves, true);
+	rootMovesCnt = pos->m_legalMovesCnt;
+	orderMoves(rootMoves, rootMovesCnt, rootMoveIndices, (foundRootInTT ? nullMove : ttRoot->bestMove), nullMove, 0);
+
 	int16_t eval = pos->evaluate();
+	int16_t lastEval = 0;
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) { 
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
 
-		int16_t curEval = eval;
-
-		int16_t windowSz = 15;
-		curEval = search<Root>(i, eval - windowSz, eval + windowSz);
-		if (abs(eval - curEval) >= windowSz) {
-			curEval = search<Root>(i, -pieceValue[KING] - 1, pieceValue[KING] + 1);
+		//Aspiration window formula taken from stockfish
+		int16_t delta = 9, curEval = 0;
+		alpha = max<int16_t>(eval - delta, -pieceValue[KING]);
+		beta = min<int16_t>(eval + delta, pieceValue[KING]);
+		while (1) {
+			if (Clock::now() >= searchEndTime) {
+				break;
+			}
+			
+			curEval = search<Root>(i, alpha, beta);
+			if (curEval <= alpha) {
+				beta = (alpha + beta) / 2;
+				alpha = max<int16_t>(curEval - delta, -pieceValue[KING]);
+			} else {
+				if (curEval >= beta) {
+					beta = min<int16_t>(curEval + delta, pieceValue[KING]);
+				} else {
+					break;
+				}
+			}
+			delta += delta / 3;
 		}
 
 		//Exit if ran out of time
@@ -107,6 +136,12 @@ inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
 			std::cout << "; }; Time remaining: ";
 			std::cout << std::max<int64_t>(0, searchEndTime - Clock::now()) << '\n';
 		}
+		std::stable_sort(rootMoveIndices, rootMoveIndices + rootMovesCnt,
+			[this](const int16_t idx1, const int16_t idx2) {
+				return rootMovesEval[idx1] > rootMovesEval[idx2];
+			}
+		);
+		lastEval = eval;
 		eval = curEval;
 	}
 	return eval;
@@ -298,7 +333,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	int16_t moveIndices[256];
-	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, mateIfNullMove);
+	//if (!root) {
+		orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, mateIfNullMove);
+	//} else {
+	//	memcpy(moveIndices, rootMoveIndices, movesCnt * sizeof(int16_t));
+	//}
 
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 2;
@@ -430,13 +469,14 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		if (res > pieceValue[KING] - MAX_PLY_MATE) {
 			res -= 2;
 		}
-		//Alpha-beta cutoff
+		if (root) {
+			const int16_t rmIdx = rootMoveIndices[i];
+			rootMovesEval[rmIdx] = res;
+		}
+
+		//Beta cutoff
 		if (res >= beta) {
 			ttEntryRes->init(pos->zHash, curMove, res, depth, tt.gen, BoundType::LowBound);
-			if (root) {
-				pos->m_legalMovesCnt = movesCnt;
-				bestMove = curMove;
-			}
 			if (!pos->isCapture(curMove)) {
 				//Update history heuristic
 				int* const hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[getStartPos(curMove)]->type][getEndPos(curMove)];
