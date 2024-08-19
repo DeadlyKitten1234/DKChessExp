@@ -273,6 +273,7 @@ uint64_t Position::getZHashNoEp() const {
 
 int8_t Position::makeMove(int16_t move) {
 	int8_t stTile = getStartPos(move), endTile = getEndPos(move);
+
 	//Update bitboards, bonuses ans zobrist hash
 	if (m_blackToMove) { updateDynamicVars<1>(m_pieceOnTile[stTile]->type, stTile, endTile); }
 	else { updateDynamicVars<0>(m_pieceOnTile[stTile]->type, stTile, endTile); }
@@ -386,6 +387,14 @@ int8_t Position::makeMove(int16_t move) {
 		}
 	}
 
+
+	//Update draw rules
+	drawMan.rule50count++;
+	drawMan.addGameState(zHash);
+	if (m_pieceOnTile[stTile]->type == PAWN || m_pieceOnTile[captureTile] != nullptr) {
+		drawMan.rule50count = 0;
+	}
+
 	//Set pieces on tiles
 	m_pieceOnTile[stTile]->setPos(endTile);
 	m_pieceOnTile[endTile] = m_pieceOnTile[stTile];
@@ -394,7 +403,11 @@ int8_t Position::makeMove(int16_t move) {
 	return capturedPieceIdx;
 }
 
-void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_) {
+void Position::undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_, int8_t rule50count_) {
+	//Update draw rules
+	drawMan.rule50count = rule50count_;
+	drawMan.popGameState();
+
 	//Update zobrist hash for castling and ep
 	if (m_possibleEnPassant != -1) {
 		zHash ^= hashNumsEp[getX(m_possibleEnPassant)];
@@ -528,4 +541,6 @@ void Position::deleteData() {
 	if (m_legalMoves != nullptr) {
 		delete[] m_legalMoves;
 	}
+
+	drawMan.reset();
 }

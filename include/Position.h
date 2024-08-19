@@ -2,6 +2,7 @@
 #include "Piece.h"
 #include "Move.h"
 #include "EvalValues.h"
+#include "DrawManager.h"
 #include <algorithm>//min
 using std::abs;
 using std::min;
@@ -19,7 +20,7 @@ public:
 	uint64_t getZHashNoEp() const;
 	//@returns Captured piece idx
 	int8_t makeMove(int16_t move);
-	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_);
+	void undoMove(int16_t move, int8_t capturedPieceIdx, int8_t bitmaskCastling_, int8_t possibleEnPassant_, int8_t rule50count_);
 	void makeNullMove();
 	void undoNullMove(int8_t possibleEnPassant_);
 
@@ -39,6 +40,7 @@ public:
 		return (m_pieceOnTile[getEndPos(move)] != nullptr);
 	}
 	inline bool isEnPassant(const int16_t move) const {
+		if (m_pieceOnTile[getStartPos(move)] == nullptr) { return false; }
 		return (move == nullMove ? 0 : (m_pieceOnTile[getStartPos(move)]->type == PAWN && getEndPos(move) == m_possibleEnPassant));
 	}
 
@@ -76,6 +78,8 @@ public:
 
 	bool friendlyInCheck;//Call updateLegalMoves before trusting
 	uint64_t enemyPawnAttacksBitmask;//Call updateLegalMoves before trusting
+
+	DrawManager drawMan;
 
 private:
 	template<bool blackPerspective>
