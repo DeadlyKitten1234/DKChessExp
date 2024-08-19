@@ -108,7 +108,7 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 	AI aiGood;
 	AICompare aiBad;
 	uint64_t repHistory[1024];
-	bool twice[1024];
+	bool twice[1024], flipped = 0;
 	for (int c = 0; c < numberOfGames; c++) {
 		tt.clear();
 		aiBad.ttCmp.clear();
@@ -127,7 +127,11 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 		aiGood.initPos(pos);
 		aiBad.initPos(pos);
 
-		bool goodToMove = !pos->m_blackToMove;
+		bool goodToMove = rng.rand() & 1;
+		if ((goodToMove == pos->m_blackToMove) != flipped) {
+			world.m_gameManager.m_board.flip(true);
+			flipped = !flipped;
+		}
 		int move50count = 0;
 		while (1) {
 			if (goodToMove) {

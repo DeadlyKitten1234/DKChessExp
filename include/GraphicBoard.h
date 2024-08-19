@@ -15,7 +15,7 @@ public:
 	void init();
 	void initPos(Position* pos);
 	void draw(int2 mouseCoords);
-	void flip();
+	void flip(bool ignoreDelay = false);
 
 	void selectPiece(int2 mouseCoords);
 	int16_t dropPiece(int2 mouseCoords);//Returns move if legal
