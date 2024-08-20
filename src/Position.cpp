@@ -391,7 +391,7 @@ int8_t Position::makeMove(int16_t move) {
 	//Update draw rules
 	drawMan.rule50count++;
 	drawMan.addGameState(zHash);
-	if (m_pieceOnTile[stTile]->type == PAWN || m_pieceOnTile[captureTile] != nullptr) {
+	if (m_pieceOnTile[stTile]->type == PAWN || capturedPieceIdx != -1) {
 		drawMan.rule50count = 0;
 	}
 
