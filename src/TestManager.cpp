@@ -103,7 +103,7 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 	std::ifstream inputS;
 	std::ofstream out("assets/tests/Results.txt");
 	inputS.open("assets/tests/TestPositions/TestPositions.txt");
-	RandNumGen rng(3141592653ULL);
+	RandNumGen rng(Clock::now());
 	string fen = "";
 	AI aiGood;
 	AICompare aiBad;
@@ -116,7 +116,7 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 		for (int i = 0; i < 1024; i++) {
 			repHistory[i] = twice[i] = 0;
 		}
-		int skipForward = rng.rand() % 5;
+		int skipForward = rng.rand() % 10;
 		for (int i = 0; i <= skipForward; i++) {
 			getline(inputS, fen);
 			inputS >> std::ws;
