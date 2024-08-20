@@ -25,7 +25,6 @@ bool DrawManager::checkForRep() const {
 	bool foundOnce = false;
 	for (int i = repHistorySz - 3; i >= repHistorySz - rule50count; i -= 2) {
 		if (repHistory[i] == hashToCompare) {
-			return true;
 			if (foundOnce) {
 				return true;
 			}
