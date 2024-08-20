@@ -42,7 +42,7 @@ private:
 	//@returns Eval
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 	inline void orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices, 
-							int16_t ttBestMove, int16_t bestMoveAfterNull, bool mateIfNullMove = false);
+							int16_t ttBestMove, int16_t bestMoveAfterNull, int16_t nmScoreDelta = 0);
 	void resetHistory();
 	void updateHistoryNewSearch();
 
@@ -57,11 +57,16 @@ private:
 
 	int inScout;
 
-	//<https://www.chessprogramming.org/History_Heuristic>
+	//<https://www.chessprogramming.org/History_Heuristic> 
+	//Addressed by color, piece type, end square
 	int historyHeuristic[2][6][64];
 	static const int MAX_HISTORY;
+	//<https://www.chessprogramming.org/History_Heuristic#Capture_History>
+	//Addressed by color, piece type, end square, captured piece type
+	int captureHistory[2][6][64][6];
 
 	//<https://www.chessprogramming.org/Countermove_Heuristic>
+	//Addressed by color, piece type, end square
 	int16_t counterMove[2][6][64];
 	static const int COUNTER_MOVE_BONUS;
 
@@ -71,6 +76,7 @@ private:
 	static const int NULL_MOVE_MATE_DEFEND_BONUS;
 
 	//<https://www.chessprogramming.org/Killer_Heuristic>
+	//Addressed by ply from root (second param is just to have 2 killers) 
 	int16_t killers[128][2];
 	static const int KILLER_BONUS;
 	inline void updateKillers(int16_t newMove) {
