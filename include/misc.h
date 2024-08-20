@@ -29,7 +29,8 @@ inline int8_t floorLog2(int num) {
 	num |= num >> 4;
 	num |= num >> 8;
 	num |= num >> 16;
-	return getLSBPos(num);
+	num++;
+	return getLSBPos(num) - 1;
 }
 inline int16_t fastSqrt(int x) {
 	//Source: https://en.wikipedia.org/wiki/Fast_inverse_square_root
