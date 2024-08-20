@@ -10,7 +10,7 @@ GameManager::~GameManager() {
 
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
-		m_ai.startSearch(1200);
+		m_ai.startSearch(15);
 		m_pos->makeMove(m_ai.bestMove);
 		m_pos->updateLegalMoves<0>(true);
 		return;
