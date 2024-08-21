@@ -38,7 +38,7 @@ private:
 	int16_t iterativeDeepening(int8_t depth, bool printRes = true);
 	//@returns Eval
 	template<NodeType nodeType>
-	int16_t search(int8_t depth, int16_t alpha, int16_t beta);
+	int16_t search(int8_t depth, int16_t alpha, int16_t beta, bool cutNode);
 	//@returns Eval
 	int16_t searchOnlyCaptures(int16_t alpha, int16_t beta);
 	inline void orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices, 

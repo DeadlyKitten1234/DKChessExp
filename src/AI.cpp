@@ -1,7 +1,7 @@
 #include "AI.h"
 const int AI::MAX_PLY_MATE = 256;
 const int AI::CHECK_BONUS = 125;
-const int AI::MAX_HISTORY = 120;
+const int AI::MAX_HISTORY = 250;
 const int AI::COUNTER_MOVE_BONUS = 192;
 const int AI::KILLER_BONUS = 350;
 const int AI::NULL_MOVE_DEFEND_BONUS = 30;
@@ -103,6 +103,9 @@ inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
 	int16_t eval = pos->evaluate();
 	int16_t lastEval = 0;
 	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) { 
+		if (i < 0 || i == 127) {
+			break;
+		}
 		//Don't oversaturate history heuristic moves that are near the root
 		updateHistoryNewSearch();
 
@@ -115,7 +118,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
 				break;
 			}
 			
-			curEval = search<Root>(i, alpha, beta);
+			curEval = search<Root>(i, alpha, beta, false);
 			if (curEval <= alpha) {
 				beta = (alpha + beta) / 2;
 				alpha = max<int16_t>(curEval - delta, -pieceValue[KING]);
@@ -158,7 +161,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
 }
 
 template<NodeType nodeType>
-inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
+inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNode) {
 	if (Clock::now() >= searchEndTime) {
 		return 0;
 	}
@@ -167,15 +170,9 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		return 0;
 	}
 	if (pos->hasInsufMaterial(pos->m_blackToMove)) {
-		if (0 <= alpha) {
-			return alpha;
-		}
 		beta = min<int16_t>(beta, 0);
 	}
 	if (pos->hasInsufMaterial(!pos->m_blackToMove)) {
-		if (0 >= beta) {
-			return 0;
-		}
 		alpha = max<int16_t>(alpha, 0);
 	}
 	if (alpha >= beta) {
@@ -239,7 +236,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 		}
 	}
 	//Limited razoring
-	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] * 2 + pvNode * 35 <= alpha &&
+	if (!abCloseToMate && depth == 3 && eval + pieceValue[PAWN] * 2 + pvNode * 27 <= alpha &&
 		(pos->m_blackToMove ? pos->m_whiteTotalPiecesCnt : pos->m_blackTotalPiecesCnt) > 3) {
 
 		depth--;
@@ -270,7 +267,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//Search
 			int16_t nullRes = -searchOnlyCaptures(-beta, -beta + 1);
 			if (nullRes < beta) {
-				nullRes = -search<NonPV>(depth - nullMoveDepthR, -beta, -beta + 1);
+				nullRes = -search<NonPV>(depth - nullMoveDepthR, -beta, -beta + 1, !cutNode);
 			}
 			//Get best move after null move
 			bool foundNullMoveTTE = 0;
@@ -291,7 +288,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 				}
 				//Don't do null moves in verification search
 				inNullMoveSearch += 3;
-				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta);
+				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta, cutNode);
 				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					//Update hh
@@ -355,18 +352,18 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 	}
 
 	int16_t moveIndices[256];
-	//if (!root) {
+	//if (!(root && depth >= 8)) {
 		orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, nmScoreDelta);
 	//} else {
-		//memcpy(moveIndices, rootMoveIndices, movesCnt * sizeof(int16_t));
+	//	memcpy(moveIndices, rootMoveIndices, movesCnt * sizeof(int16_t));
 	//}
 
 	//Milti cut https://www.chessprogramming.org/Multi-Cut
 	const int8_t multiCutDepthR = depth / 3 + 2;
 	//inScout impiles its also not a PV node
-	if (inScout && !abCloseToMate) {
+	if (cutNode && inScout && !abCloseToMate) {
 		int16_t curCutNodes = 0;
-		const int16_t movesToSearch = min<int16_t>(8, movesCnt), cutNodesToQuit = 2 + depth / 10;
+		const int16_t movesToSearch = min<int16_t>(8, movesCnt), cutNodesToQuit = 2;
 		for (int8_t i = 0; i < movesToSearch; i++) {
 			const int16_t curMove = moves[moveIndices[i]];
 			const int8_t moveSt = getStartPos(curMove), moveEnd = getEndPos(curMove);
@@ -376,7 +373,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//Search
 			int16_t res = -searchOnlyCaptures(-beta, -beta + 1);
 			if (res >= beta && depth - 1 > multiCutDepthR) {
-				res = -search<NonPV>(depth - 1 - multiCutDepthR, -beta, -beta + 1);
+				res = -search<NonPV>(depth - 1 - multiCutDepthR, -beta, -beta + 1, !cutNode);
 			}
 			killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 			//Undo move
@@ -413,7 +410,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			//Search
 			int16_t res = -searchOnlyCaptures(-probCutBeta, -probCutBeta + 1);
 			if (res >= probCutBeta) {
-				res = -search<NonPV>(depth - probCutDepthR - 1, -probCutBeta, -probCutBeta + 1);
+				res = -search<NonPV>(depth - probCutDepthR - 1, -probCutBeta, -probCutBeta + 1, !cutNode);
 			}
 			//Undo move
 			pos->undoMove(curMove, capturedPieceIdx, bitmaskCastling, possibleEnPassant, r50count);
@@ -473,18 +470,17 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 
 		//Search
 		int16_t res = 0;
-		if (i == 0 || depth <= 2) {
-			res = -search<(pvNode ? PV : NonPV)>(depth - 1, -beta, -alpha);
+		if (i == 0 && pvNode) {
+			res = -search<PV>(depth - 1, -beta, -alpha, false);
 		} else {
 			//Perform zero window search
 			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
 			//https://www.chessprogramming.org/Null_Window
 			inScout++;
-			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha);
-			
+			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha, !cutNode);
 			inScout--;
 			if (res > alpha && pvNode && beta - alpha > 1) {
-				res = -search<PV>(depth - 1, -beta, -alpha);
+				res = -search<PV>(depth - 1, -beta, -alpha, false);
 			}
 		}
 		killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
@@ -502,8 +498,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta) {
 			res -= 2;
 		}
 		if (root) {
-			const int16_t rmIdx = rootMoveIndices[i];
-			rootMovesEval[rmIdx] = res;
+			if (res > alpha) {
+				const int16_t rmIdx = rootMoveIndices[i];
+				rootMovesEval[rmIdx] = res;
+			}
 		}
 
 		//Beta cutoff
@@ -571,15 +569,9 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		return 0;
 	}
 	if (pos->hasInsufMaterial(pos->m_blackToMove)) {
-		if (0 <= alpha) {
-			return alpha;
-		}
 		beta = min<int16_t>(beta, 0);
 	}
 	if (pos->hasInsufMaterial(!pos->m_blackToMove)) {
-		if (0 >= beta) {
-			return 0;
-		}
 		alpha = max<int16_t>(alpha, 0);
 	}
 	if (alpha >= beta) {
@@ -793,11 +785,14 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 
 		if (mateIfNullMove) {
 			if ((1ULL << endPos) & (betweenBitboard[bmAfterNullEnd][bmAfterNullSt] |
-				betweenBitboard[bmAfterNullEnd][(pos->m_blackToMove ? pos->m_blackPiece : pos->m_whitePiece)[0]->pos])) {
+				(pt == KING ? 0 : betweenBitboard[bmAfterNullEnd][friendlyKingPos]))) {
 				curGuess += NULL_MOVE_MATE_DEFEND_BONUS / 2;
 			}
 			if (max(abs(getX(stPos) - getX(friendlyKingPos)), abs(getY(stPos) - getY(friendlyKingPos))) == 1) {
 				curGuess += NULL_MOVE_MATE_DEFEND_BONUS / 42;
+			}
+			if (pt == KING) {
+				curGuess += NULL_MOVE_MATE_DEFEND_BONUS / 21;
 			}
 		}
 
@@ -864,6 +859,8 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 						const int x = nmScoreDelta;
 						const int bonus = (floorLog2(x) * fastSqrt(x) / (floorLog2(x) + fastSqrt(x))) * x / 34;
 						curGuess += bonus;
+					} else {
+						curGuess += floorLog2(nmScoreDelta - 16);
 					}
 				}
 			}
