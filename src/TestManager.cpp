@@ -108,6 +108,7 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 	AI aiGood;
 	AICompare aiBad;
 	uint64_t repHistory[1024];
+	int16_t stalemates = 0, draw50 = 0, drawInsuf = 0, drawRep = 0;
 	bool twice[1024], flipped = 0;
 	for (int c = 0; c < numberOfGames; c++) {
 		tt.clear();
@@ -139,7 +140,6 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				aiGood.startSearch(timeToMove, 0);
 				if (aiGood.bestMove == nullMove) {
 					loses++;
-					cout << 'L';
 					break;
 				}
 				move50count++;
@@ -149,9 +149,8 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				pos->makeMove(aiGood.bestMove);
 			} else {
 				aiBad.bestMove = nullMove;
-				aiBad.startSearch(timeToMove);
+				aiBad.startSearch(timeToMove, 0);
 				if (aiBad.bestMove == nullMove) {
-					cout << 'W';
 					wins++;
 					break;
 				}
@@ -164,18 +163,18 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 			goodToMove = !goodToMove;
 
 			if (pos->drawMan.checkForRep()) {
-				cout << "D";//Draw by rep
+				drawRep++;
 				draws++;
 				break;
 			}
 			if (pos->drawMan.checkForRule50()) {
-				cout << "D50";//Draw by 50 move rule
+				draw50++;
 				draws++;
 				break;
 			}
 			pos->updateLegalMoves<0>(false);
 			if (pos->m_legalMovesCnt == 0 && !pos->friendlyInCheck) {
-				cout << "Ds";//Draw by stalemate
+				stalemates++;
 				draws++;
 				break;
 			}
@@ -183,16 +182,31 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				pos->m_whiteTotalPiecesCnt == 1) &&
 				((pos->m_blackTotalPiecesCnt == 2 && (pos->m_blackPiecesCnt[BISHOP] == 1 || pos->m_blackPiecesCnt[KNIGHT] == 1)) ||
 				pos->m_blackTotalPiecesCnt == 1)) {
-				cout << "Di";//Draw by insufficient material
+				drawInsuf++;
 				draws++;
 				break;
 			}
-			world.draw();
-			world.m_input.getInput();
+			if (false) {
+				world.draw();
+				world.m_input.getInput();
+			}
 		}
+		//Print
+		system("cls");
+		cout << wins + draws + loses << '\n';
+		cout << "Wins:\n";
+		for (int i = 0; i < wins; i++) { cout << '#'; }
+		cout << "\nDraws by Rep:\n";
+		for (int i = 0; i < drawRep; i++) { cout << '#'; }
+		cout << "\nDraws by 50 move rule:\n";
+		for (int i = 0; i < draw50; i++) { cout << '#'; }
+		cout << "\nDraws by insufficient material:\n";
+		for (int i = 0; i < drawInsuf; i++) { cout << '#'; }
+		cout << "\nLoses:\n";
+		for (int i = 0; i < loses; i++) { cout << '#'; }
 		//Used for backup if someting goes wrong
 		out << wins << ' ' << draws << ' ' << loses << '\n';
 	}
-	std::cout << "Wins: " << wins << "; Draws: " << draws << "; Loses: " << loses << '\n';
+	std::cout << "\n\nWins: " << wins << "; Draws: " << draws << "; Loses: " << loses << '\n';
 	delete pos;
 }

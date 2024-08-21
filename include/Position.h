@@ -192,11 +192,11 @@ inline int16_t Position::evaluate() {
 
 inline PieceType Position::highestPiece(const bool black) const {
 	const int8_t* frPcs = (black ? m_blackPiecesCnt : m_whitePiecesCnt);
-	if (frPcs[QUEEN]) { return QUEEN; }
-	if (frPcs[ROOK]) { return ROOK; }
-	if (frPcs[BISHOP]) { return BISHOP; }
-	if (frPcs[KNIGHT]) { return KNIGHT; }
-	if (frPcs[PAWN]) { return PAWN; }
+	if (frPcs[QUEEN])	{ return QUEEN;		}
+	if (frPcs[ROOK])	{ return ROOK;		}
+	if (frPcs[BISHOP])	{ return BISHOP;	}
+	if (frPcs[KNIGHT])	{ return KNIGHT;	}
+	if (frPcs[PAWN])	{ return PAWN;		}
 	return UNDEF;
 }
 
