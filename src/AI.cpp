@@ -249,8 +249,12 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 		}
 	}
 
+	if (cutNode && eval - pieceValue[pos->highestPiece(pos->m_blackToMove)] > beta && depth <= 3) {
+		//depth--;
+	}
+
 	//Null move pruning <https://www.chessprogramming.org/Null_Move_Pruning>
-	if (!pvNode && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate && eval >= beta) {
+	if ((!pvNode || root) && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate && eval >= beta) {
 		//Don't chain a lot of null moves, but if last was null and in 
 		//only one null move search, do null movee to detect zugzwang
 		if (inNullMoveSearch == lastWasNull) {
@@ -281,6 +285,10 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			movesHistory.pop();
 			//Prune
 			if (nullRes >= beta) {
+				if (root) {
+					//Sholudn't trigger when root since beta is INF + 1, but just in case
+					continue;
+				}
 				//MovesHistory won't be empty, because we only do it in nonPv nodes and root is pv
 				int16_t lastMoveEnd = getEndPos(movesHistory.top());
 				if (depth - nullMoveDepthR <= 0) {
@@ -288,7 +296,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 				}
 				//Don't do null moves in verification search
 				inNullMoveSearch += 3;
-				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta, cutNode);
+				int16_t verification = search<NonPV>(depth - nullMoveDepthR, beta - 1, beta, true);
 				inNullMoveSearch -= 3;
 				if (verification >= beta) {
 					//Update hh
@@ -435,6 +443,11 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 	for (int16_t i = 0; i < movesCnt; i++) {
 		const int16_t curMove = moves[moveIndices[i]];
 		const int8_t moveSt = getStartPos(curMove), moveEnd = getEndPos(curMove);
+		const bool quiet = pos->isCapture(curMove) && !isPromotion(curMove) && !givesCheck(curMove);
+		//Uncertainty cutoffs https://www.chessprogramming.org/Uncertainty_Cut-Offs
+		if ((inScout && i > 6) && !pos->isCapture(curMove) && !isPromotion(curMove) && !(givesCheck(curMove) && abCloseToMate)) {
+			return alpha;
+		}
 		//Reverse futility pruning (i think); https://www.chessprogramming.org/Reverse_Futility_Pruning
 		int16_t evalIncrease = 0;
 		if (pos->isCapture(curMove)) {
@@ -451,7 +464,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 		}
 
 		//Taken from stockfish and added conditions for hh, cMove and killers
-		if (!root && !pos->friendlyInCheck && depth <= 8 && !abCloseToMate &&
+		if (!root && !pos->friendlyInCheck && depth <= 8 && !abCloseToMate && quiet && 
 			eval + evalIncrease + pieceValue[PAWN] * depth / 2 + (bestValue < eval - 57 ? 114 : 57) <= alpha) {
 			const int8_t lastMoveEnd = getEndPos(movesHistory.top());
 
@@ -470,19 +483,32 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 
 		//Search
 		int16_t res = 0;
-		if (i == 0 && pvNode) {
-			res = -search<PV>(depth - 1, -beta, -alpha, false);
-		} else {
-			//Perform zero window search
-			//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
-			//https://www.chessprogramming.org/Null_Window
+		if (depth >= 2 && i > 1 + root && quiet) {
+			//Late move reductions
+			int8_t newDepth = depth - 2 + pvNode;
 			inScout++;
-			res = -search<NonPV>(depth - 1, -alpha - 1, -alpha, !cutNode);
+			res = -search<NonPV>(newDepth - 1, -alpha - 1, -alpha, true);
 			inScout--;
-			if (res > alpha && pvNode && beta - alpha > 1) {
+			//If needs full search
+			if (res > alpha) {
+				res = -search<NonPV>(depth - 1, -alpha - 1, -alpha, !cutNode);
+			}
+		} else {
+			if (i == 0 && pvNode) {
 				res = -search<PV>(depth - 1, -beta, -alpha, false);
+			} else {
+				//Perform zero window search
+				//https://www.chessprogramming.org/Principal_Variation_Search#ZWS
+				//https://www.chessprogramming.org/Null_Window
+				inScout++;
+				res = -search<NonPV>(depth - 1, -alpha - 1, -alpha, !cutNode);
+				inScout--;
 			}
 		}
+		if (res > alpha && pvNode && beta - alpha > 1) {
+			res = -search<PV>(depth - 1, -beta, -alpha, false);
+		}
+
 		killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 
 		//Undo move
@@ -544,10 +570,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 				alpha = res;
 				failLow = 0;
 			}
-		}
-		//Uncertainty cutoffs https://www.chessprogramming.org/Uncertainty_Cut-Offs
-		if ((inScout && i > 6) && (!pos->isCapture(curMove) || !givesCheck(curMove))) {
-			return alpha;
 		}
 	}
 	
