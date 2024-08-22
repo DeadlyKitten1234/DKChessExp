@@ -254,7 +254,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 	}
 
 	//Null move pruning <https://www.chessprogramming.org/Null_Move_Pruning>
-	if ((!pvNode || root) && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate && eval >= beta) {
+	if (!pvNode && !pos->friendlyInCheck && pos->hasNonPawnPiece(pos->m_blackToMove) && !abCloseToMate && eval >= beta) {
 		//Don't chain a lot of null moves, but if last was null and in 
 		//only one null move search, do null movee to detect zugzwang
 		if (inNullMoveSearch == lastWasNull) {
@@ -285,10 +285,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			movesHistory.pop();
 			//Prune
 			if (nullRes >= beta) {
-				if (root) {
-					//Sholudn't trigger when root since beta is INF + 1, but just in case
-					continue;
-				}
 				//MovesHistory won't be empty, because we only do it in nonPv nodes and root is pv
 				int16_t lastMoveEnd = getEndPos(movesHistory.top());
 				if (depth - nullMoveDepthR <= 0) {
