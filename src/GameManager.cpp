@@ -10,7 +10,12 @@ GameManager::~GameManager() {
 
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
-		m_ai.startSearch(15);
+		m_ai.startSearch(5);
+
+		if (m_pos->isCapture(m_ai.bestMove)) {
+			Nuke::nukes[getEndPos(m_ai.bestMove) / 8][getEndPos(m_ai.bestMove) % 8].activate();
+		}
+
 		m_pos->makeMove(m_ai.bestMove);
 		m_pos->updateLegalMoves<0>(true);
 		return;
@@ -31,7 +36,11 @@ void GameManager::update(const InputManager& input) {
 						res = createMove(getStartPos(res), getEndPos(res), 0, (promotionType == UNDEF ? QUEEN : promotionType));
 					}
 				}
+				if (m_pos->isCapture(res)) {
+					Nuke::nukes[getEndPos(res) / 8][getEndPos(res) % 8].activate();
+				}
 				m_pos->makeMove(res);
+				
 				m_pos->updateLegalMoves<0>(true);
 			}
 		}

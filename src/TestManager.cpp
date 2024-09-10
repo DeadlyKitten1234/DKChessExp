@@ -146,6 +146,9 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				if (pos->isCapture(aiGood.bestMove) || pos->m_pieceOnTile[getStartPos(aiGood.bestMove)]) {
 					move50count = 0;
 				}
+				//if (pos->isCapture(aiGood.bestMove)) {
+				//	Nuke::nukes[getEndPos(aiGood.bestMove) / 8][getEndPos(aiGood.bestMove) % 8].activate();
+				//}
 				pos->makeMove(aiGood.bestMove);
 			} else {
 				aiBad.bestMove = nullMove;
@@ -158,6 +161,9 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				if (pos->isCapture(aiBad.bestMove) || pos->m_pieceOnTile[getStartPos(aiBad.bestMove)]) {
 					move50count = 0;
 				}
+				//if (pos->isCapture(aiBad.bestMove)) {
+				//	Nuke::nukes[getEndPos(aiBad.bestMove) / 8][getEndPos(aiBad.bestMove) % 8].activate();
+				//}
 				pos->makeMove(aiBad.bestMove);
 			}
 			goodToMove = !goodToMove;
@@ -173,9 +179,17 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				break;
 			}
 			pos->updateLegalMoves<0>(false);
-			if (pos->m_legalMovesCnt == 0 && !pos->friendlyInCheck) {
-				stalemates++;
-				draws++;
+			if (pos->m_legalMovesCnt == 0) {
+				if (pos->friendlyInCheck) {
+					if (goodToMove) {
+						loses++;
+					} else {
+						wins++;
+					}
+				} else {
+					stalemates++;
+					draws++;
+				}
 				break;
 			}
 			if (((pos->m_whiteTotalPiecesCnt == 2 && (pos->m_whitePiecesCnt[BISHOP] == 1 || pos->m_whitePiecesCnt[KNIGHT] == 1)) ||
@@ -186,10 +200,8 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 				draws++;
 				break;
 			}
-			if (false) {
-				world.draw();
-				world.m_input.getInput();
-			}
+			//world.draw();
+			//world.m_input.getInput();
 		}
 		//Print
 		system("cls");
@@ -198,6 +210,8 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 		for (int i = 0; i < wins; i++) { cout << '#'; }
 		cout << "\nDraws by Rep:\n";
 		for (int i = 0; i < drawRep; i++) { cout << '#'; }
+		cout << "\nStalemates:\n";
+		for (int i = 0; i < stalemates; i++) { cout << '#'; }
 		cout << "\nDraws by 50 move rule:\n";
 		for (int i = 0; i < draw50; i++) { cout << '#'; }
 		cout << "\nDraws by insufficient material:\n";

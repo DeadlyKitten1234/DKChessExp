@@ -1,5 +1,6 @@
 #include "GraphicBoard.h"
 #include "Move.h"
+#include "Clock.h"
 #include "PrecomputedData.h"
 #include "Presenter.h"
 #include "Globals.h"
@@ -7,6 +8,11 @@
 const int GraphicBoard::m_boardSizePx = 828;
 SDL_Texture* GraphicBoard::m_possibleMoveTexture = nullptr;
 SDL_Texture* GraphicBoard::m_captureTexture = nullptr;
+SDL_Texture* GraphicBoard::m_nukeTexture = nullptr;
+
+SDL_Texture* Nuke::tex = nullptr;
+Nuke Nuke::nukes[8][8];
+int64_t Nuke::stTime = 0;
 
 GraphicBoard::GraphicBoard() {
 	m_tile = nullptr;
@@ -25,6 +31,7 @@ void GraphicBoard::init() {
 	SDL_Texture* BlackTile = loadTexture("BlackTile", Presenter::m_mainRenderer);
 	m_possibleMoveTexture = loadTexture("PossibleMove", Presenter::m_mainRenderer);
 	m_captureTexture = loadTexture("CaptureMove", Presenter::m_mainRenderer);
+	Nuke::init();
 	SDL_SetTextureAlphaMod(m_possibleMoveTexture, 50);
 	SDL_SetTextureColorMod(m_possibleMoveTexture, 0, 0, 0);
 	m_legalMoveTile = new int16_t[64]();
@@ -114,6 +121,26 @@ void GraphicBoard::draw(int2 mouseCoords) {
 		const Piece* selPiece = m_pos->m_pieceOnTile[m_selectedPiecePos];
 		SDL_Rect pieceRect = { int(mouseCoords.x - tileSz * 0.7), int(mouseCoords.y - tileSz * 0.7), int(tileSz * 1.4), int(tileSz * 1.4) };
 		Presenter::drawPiece(selPiece->type, pieceRect, selPiece->black);
+	}
+
+	for (int i = 0; i < 8; i++) {
+		for (int j = 0; j < 8; j++) {
+			Drawable* drawTile = &m_tile[i][j];
+			if (flipped) {
+				drawTile = &m_tile[7 - i][7 - j];
+			}
+			Nuke* drawNuke = &Nuke::nukes[i][j];
+			//drawNuke->activate();
+			drawNuke->render(drawTile);
+			if (drawNuke->active) {
+				if (Clock::now() > Nuke::stTime + 50) {
+					drawNuke->incrY();
+				}
+			}
+		}
+	}
+	if (Clock::now() > Nuke::stTime + 50) {
+		Nuke::stTime = Clock::now();
 	}
 }
 
