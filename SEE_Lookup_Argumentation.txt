@@ -1,0 +1,185 @@
+PieceTypes = { pawn, knight bishop, rook, queen, king }
+
+-=-=-Why only care about pcs difference:-=-=-
+WLOG white to move
+Assumption: the piece on the tile is black's least valuable
+=>? We don't care if {X vs Y} pcs of type PT or {X-min(X,Y) vs Y-min(X,Y)} pcs of type PT?
+
+Because white to move => lBound >= curScore (if not set lBound to curScore)
+
+Induction:
+(Proving "We don't care if {X vs Y} pcs of type PT or {X-min(X,Y) vs Y-min(X,Y)} pcs of type PT")
+Base:
+for PT = PAWN, then because each side will capture with least valuable piece, pawns will be traded off first
+(Example: 2vs1 pawns, white captures with pawn, black captures with pawn, curScore doesn't change and 1vs0 pawns are left
+=> 2vs1 pawns has the same score as 1vs0 pawns (likewise for other {X vs Y}))
+
+Induction step:
+if for all T ∈ PieceTypes: pieceValue[T] < pieceValue[PT] it is true, then =>? for PT it is true
+
+we only care about whitePcs[PT] after white has no pcs less valuable than PT 
+=> we only need to consider black's pieces less valuable than PT
+when white captures with PT, black can recapture with <= PT (because if black has no pcs of type PT, the statement is true)
+and even if black recaptures, newScore will be <= lBound
+
+
+
+as longs as the assumption that black's least valuable piece is on the tile, only care about pcs cnt difference
+
+-=-=-Pins:-=-=-
+let (ab) mean piece of type a pins piece of tye b
+
+if (ab), where pieceValue[a] < pieceValue[b], then piece a can capture piece b with check, 
+then after recapture or something else, then it will be playerWithPieceA's turn again
+
+(bb) X impos
+(bn) X impos (tile color)
+(rb) V
+(rn) V
+(rr) X impos
+(qb) X just capture the queen
+(qr) X just capture the queen
+(qn) X never worth it (max queen trade = 0)
+
+but (rb) & (rn) X impos (tile color)
+and  (rb) & (rb) X, unless promote to bishop
+=> only (rn) & (rn) is possible, but it should be rare enough for us not to care
+
+=> only pins worth looking at:
+(rb)
+(rn)
+
+But because when player unpins to capture, other player will immediately recapture with pinned piece,
+pinning player might as well use the pinning piece to capture last (because then it will be pinned player's most valuable piece)
+=> if use pinning piece(rook) to capture (piece <= rook) => (newScore <= curScore) (in other words capturing piece <= rook with the pinning rook is no good)
+=> only worth capturing queen or king with rook
+
+WLOG white rook is pinning black piece
+I case: black captures with king
+but because the pinning rook is attacking the tile, the move is illegal
+=> clamp [KINGS] to interval [1 white king, 0]
+
+II case: black captures with queen
+the last capture black makes is with queen and white can't recapture with anything other than the pinning rook
+white captures with the rook
+but with queen black can capture max rook(it can't be a queen, because we only care about pcs cnt difference) (and the case of capturing king is handled below)
+and then recapture the pinning rook with pinned piece (or with king)
+=> black will lose a queen and gain max 2 rooks
+and here we use the fact that (pieceValue[QUEEN] >= 2 * pieceValue[ROOK]) (at least in my program), so the trade isn't worth it for black
+=> can clamp [QUEENS] to interval [1 white queen, 0]
+however, if removing black queen from param, we still know it is there and so that means white can't capure with a king, 
+so if removing black queen also need to clamp [KINGS] to interval [1 black king, 0]
+
+Full solution to pins (in the case of white having the pin):
+bool pinsExist = check for (rb) and (rn);
+if (pinsExist) {
+	blackKings = 0;
+}
+if (pinsExist && blackQueens > 0) {
+	blackQueens = 0;
+	whiteKings = 0;
+}
+
+Can also (almost) safely ignore this, because positions like this should be very rare and the only impact is that kings and queens = 0
+
+-=-=-X-Rays:-=-=-
+X-Rays are (i think) when attacking with 2 pieces behind each other
+example: (. means empty square, X is the attacked tile)
+......X.	......X.	......X.	......X.
+........	........	.....p..	.....p..
+....b...	......r.	........	........
+...q....	......q.	...b....	...q....
+X-Rays with anything behind king can't be used, so just don't add piece behind king
+
+in examples like this (where queen is behind piece) just add both pieces to param
+also the X-Ray bishop/queen behind a pawn also falls into this category
+
+in the opposite case (where piece is behind queen) do the following:
+WLOG white has the piece behind the queen
+I case: If both players have a queen, remove them and add the bishop
+II case: If only white has a queen attacking the tile
+II.I case: black can't recapture queen
+bishop(or rook) obviously won't be used
+II.II case: black can recapture queen
+again using the fact that (pieceValue[QUEEN] >= 2 * pieceValue[ROOK]), 
+it isn't worth it for white to capture max rook with queen and then max another rook with piece behind queen
+=> bishop(or rook) won't be used
+
+but since bishop(or rook) is still there, we need to clamp [KINGS] to interval [1 white king, 0], because black can't capture with a king
+
+Full solution to X-Rays (in the case of white having the X-Ray):
+bool xRaysExist = checkForXRays();
+if (xRaysExist) { 
+	if (pieceValue[pieceInFront] < pieceValue[pieceBehind]) {
+		whitePcsCnt[pieceBehind]++;
+	} else {
+		if (pieceInFront != KING) {
+			blackKings = 0;
+		}
+	}
+}
+
+Can also (almost) safely ignore this, because positions like this only impact that kings = 0
+
+-=-=-Other cases:-=-=-
+X-Ray, but 2 opposite colored pieces
+.X.r.R...
+When scanning for rooks, just ignore other rooks
+
+-=-=-Lookup table size:-=-=-
+0. Only caring about 1 pin makes the lookup table possible (otherwise would need to have param for 4 pins, which would make size 5^4=625 times larger)
+
+1.1.1. Using that the only pin need to care about is rook saves 66% size; 3 times smaller
+1.1.2. Using the rest of the pin argument saves [pinned piece type] param; Saves 80% size; 5 times smaller
+1.2. Using the X-Ray argument saves param [xrays with q in front of b][xrays with q in front of r]; Saves 93% size; 16 times smaller
+
+Steps 0-1.2 are needed to make the lookup table possible to think about (and to even make it fit in the memory)
+
+Param [wPawn][bPawn][wKnight][bKnight][wBishop][bBishop][wRook][bRook][wQueen][bQueen][wKing][bKing][pt]
+Base   3      3      9        9        10        10       11     11     10      10       2      2      5  total:17641800000
+
+2.Removing X-Rays that require promotion:
+(this step is redundant with steps 3 and 5, but not including it would give way too much credit to step 3)
+Param [wPawn][bPawn][wKnight][bKnight][wBishop][bBishop][wRook][bRook][wQueen][bQueen][wKing][bKing][pt]
+XRay  3      3      9        9        5        5        5      5      10       10      2      2      5  total:911250000
+Saves 95% size; 19.36 times smaller
+
+3.Using the pcs dif argument:
+Param [PAWNS][KNIGHT][BISHOP][ROOK][QUEEN][KING][pt]
+pcsDif 5      17      9       9     19     3     5   total:1962225
+Saves 99.7% size; 464 times smaller
+
+4.combining bishop and knight into 1 param to save space:
+Param [PAWNS][MINOR][ROOK][QUEEN][KING][pt]
++-2p; +- 11m; += 4r; += 8q; += 1k; piece on tile
+(max m = +-11(1b,2n,8promoted))
+minors 5      23     9     19     3     5    total:294975
+Saves 85% size; 6.65 times smaller
+
+5.clamping pieces to reasonable bounds (ignore promotion) to get:
+clamp  5      7      5     3      3     5    total:7875
+Saves 97% size; 37.4 times smaller
+
+6.making score in SEE lookup to "if opponent captures" to save piece on tile param
+Param [PAWNS][MINOR][ROOK][QUEEN][KING]
+opt    5      7      5     3      3 	1    total:1575
+Saves 80% size; 5 times smaller
+
+
+Most effective steps:
+Pin and X-Ray		(makes it possible)
+Pcs cnt dif argument	(~450 times smaller)
+Ignoring promotion	(~40 times smaller)
+The redundant step 2 	(~20 times smaller)
+
+Result of steps:
+0-1.2 makes the lookup table possible
+2-6 reduces size of lookup table 11000000 times
+
+
+-=-=-Function implementation:-=-=-
+0.Make the move
+1.Stage capture with least val piece
+2.Calc (friendly - enemy)[pt]
+3.Lookup
+4.Min the score if hadn't captured

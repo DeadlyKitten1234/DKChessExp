@@ -7,17 +7,19 @@ using std::abs;
 
 extern const int16_t MAX_LEGAL_MOVES;
 extern uint64_t tileBlocksCheck;
-extern uint64_t pinnedPossibleMoves[64];
+extern uint64_t pinnersBB;
+extern int8_t piecePinningSq[64];//Holds for every tile the piece it pins
 extern uint64_t tilePinnedBitmask;
+extern uint64_t pinnedPossibleMoves[64];
+extern int8_t pinnerOfSq[64];//Holds for every tile the piece that pins it
 extern uint64_t tileAttacked;//Used for faster king move generation in endgame
-extern int8_t nullPinnedDir;
 extern bool calcChecks;
 extern bool inCheck;
 extern bool inDoubleCheck;
 extern uint64_t pawnAtt;
 extern uint64_t checks[6];
 
-inline uint64_t attackersToSq(const Position& pos, int8_t sq, int8_t ignoreStTile = -1) {
+inline uint64_t enemyAttToSq(const Position& pos, int8_t sq, int8_t ignoreStTile = -1) {
 	uint64_t allBB = (pos.m_whiteAllPiecesBitboard | pos.m_blackAllPiecesBitboard) & ~(1ULL << sq);
 	if (ignoreStTile != -1) {
 		allBB &= ~(1ULL << ignoreStTile);
@@ -70,7 +72,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			out[ans++] = createMove(king->pos, curPos, 0);
 		}
 		if constexpr (!useAttackedTiles) {
-			if (!attackersToSq(pos, curPos, king->pos)) {
+			if (!enemyAttToSq(pos, curPos, king->pos)) {
 				out[ans++] = createMove(king->pos, curPos, 0);
 			}
 		}
@@ -97,7 +99,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			}
 			if constexpr (!useAttackedTiles) {
 				while (importantSq) {
-					if (attackersToSq(pos, getLSBPos(importantSq), king->pos)) {
+					if (enemyAttToSq(pos, getLSBPos(importantSq), king->pos)) {
 						illegalCastling = 1;
 						break;
 					}
@@ -125,7 +127,7 @@ inline int16_t generateKingMoves(const Position& pos, int16_t* out, int16_t curM
 			}
 			if constexpr (!useAttackedTiles) {
 				while (importantSq) {
-					if (attackersToSq(pos, getLSBPos(importantSq), king->pos)) {
+					if (enemyAttToSq(pos, getLSBPos(importantSq), king->pos)) {
 						illegalCastling = 1;
 						break;
 					}
@@ -270,6 +272,7 @@ template<bool calcAttackedTiles>
 inline void getPinsAndChecks(const Position& pos) {
 	inCheck = 0;
 	inDoubleCheck = 0;
+	pinnersBB = 0;
 	tilePinnedBitmask = 0;
 	tileBlocksCheck = 0;
 	tileAttacked = 0;
@@ -314,9 +317,12 @@ inline void getPinsAndChecks(const Position& pos) {
 		} else {
 			//If only one piece in between sliding piece and king
 			if ((pcsBetween & pcsBetween - 1) == 0) {
+				const int8_t betweenPos = getLSBPos(pcsBetween);
 				//Here we never check if piece is friendly, but doesn't matter, because we won't try move it anyway
 				tilePinnedBitmask |= pcsBetween;
-				pinnedPossibleMoves[getLSBPos(pcsBetween)] = betweenBitboard[kingPos][piecePos] | (1ULL << piecePos);
+				pinnedPossibleMoves[betweenPos] = betweenBitboard[kingPos][piecePos] | (1ULL << piecePos);
+				pinnerOfSq[betweenPos] = piecePos;
+				piecePinningSq[piecePos] = betweenPos;
 			}
 		}
 		slidingBB &= slidingBB - 1;
@@ -367,7 +373,7 @@ inline int16_t generateMoves(const Position& pos, int16_t* out, bool calculateCh
 	const uint64_t friendlyPcsBB = (pos.m_blackToMove ? pos.m_blackAllPiecesBitboard : pos.m_whiteAllPiecesBitboard);
 	int8_t enemyNonPawnPcs = (pos.m_blackToMove ? pos.m_whiteTotalPiecesCnt - pos.m_whitePiecesCnt[PAWN] : pos.m_blackTotalPiecesCnt - pos.m_blackPiecesCnt[PAWN]);
 	int8_t kingMoves = kingMovesCnt(friendlyPiece[0]->pos, friendlyPcsBB);
-	// * 4 is an estimate of how many operations attackersToSq will do for every king move (we neglect castling)
+	// * 4 is an estimate of how many operations enemyAttToSq will do for every king move (we neglect castling)
 	bool betterToUseAttackedTiles = enemyNonPawnPcs <= (kingMoves * 4);
 	//|| capturesOnly, because there won't be many captures with the king
 	if (!betterToUseAttackedTiles || capturesOnly) {
