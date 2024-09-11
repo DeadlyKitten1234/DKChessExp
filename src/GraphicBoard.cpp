@@ -17,6 +17,7 @@ int64_t Nuke::stTime = 0;
 GraphicBoard::GraphicBoard() {
 	m_tile = nullptr;
 	m_legalMoveTile = nullptr;
+	m_SEE = nullptr;
 	m_pos = nullptr;
 	m_selectedPiecePos = -1;
 	m_draggingSelectedPiece = 0;
@@ -24,7 +25,22 @@ GraphicBoard::GraphicBoard() {
 	flipped = 0;
 }
 
-GraphicBoard::~GraphicBoard() {}
+GraphicBoard::~GraphicBoard() {
+	if (m_tile != nullptr) {
+		for (int i = 0; i < 8; i++) {
+			delete[] m_tile[i];
+		}
+	}
+	if (m_legalMoveTile != nullptr) {
+		delete[] m_legalMoveTile;
+	}
+	if (m_SEE != nullptr) {
+		delete[] m_SEE;
+	}
+	if (m_pos != nullptr) {
+		delete m_pos;
+	}
+}
 
 void GraphicBoard::init() {
 	SDL_Texture* WhiteTile = loadTexture("WhiteTile", Presenter::m_mainRenderer);
@@ -35,6 +51,7 @@ void GraphicBoard::init() {
 	SDL_SetTextureAlphaMod(m_possibleMoveTexture, 50);
 	SDL_SetTextureColorMod(m_possibleMoveTexture, 0, 0, 0);
 	m_legalMoveTile = new int16_t[64]();
+	m_SEE = new int16_t[64]();
 	m_tile = new Drawable*[8]();
 	int tileSz = m_boardSizePx / 8;
 	int x = (Presenter::m_SCREEN_WIDTH - m_boardSizePx) / 2;
@@ -61,6 +78,7 @@ void GraphicBoard::initPos(Position* pos) {
 }
 
 void GraphicBoard::draw(int2 mouseCoords) {
+	//Draw tiles
 	for (int i = 0; i < 8; i++) {
 		for (int j = 0; j < 8; j++) {
 			Drawable* drawTile = &m_tile[i][j];
@@ -73,7 +91,7 @@ void GraphicBoard::draw(int2 mouseCoords) {
 				if (m_pos->m_pieceOnTile[(i * 8) + j] != nullptr || 
 					(m_pos->m_pieceOnTile[m_selectedPiecePos]->type == PAWN && i * 8 + j == m_pos->m_possibleEnPassant)) {
 					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
-						SDL_SetTextureColorMod(m_captureTexture, 0, 255, 0);
+						SDL_SetTextureColorMod(m_captureTexture, m_SEE[i * 8 + j], 255, 0);
 					}
 					Presenter::drawObject(m_captureTexture, drawTile->m_rect);
 					if (givesCheck(m_legalMoveTile[i * 8 + j])) {
@@ -93,6 +111,7 @@ void GraphicBoard::draw(int2 mouseCoords) {
 			}
 		}
 	}
+	//Draw pieces
 	int tileSz = m_boardSizePx / 8;
 	for (int i = 0; i < m_pos->m_whiteTotalPiecesCnt; i++) {
 		SDL_Rect pieceRect = { 0, 0, tileSz, tileSz };
@@ -117,12 +136,13 @@ void GraphicBoard::draw(int2 mouseCoords) {
 						tileSz * (flipped ? 7 - m_pos->m_blackPiece[i]->y + 1 : m_pos->m_blackPiece[i]->y + 1);
 		Presenter::drawPiece(m_pos->m_blackPiece[i]->type, pieceRect, m_pos->m_blackPiece[i]->black);
 	}
+	//Draw selected piece
 	if (m_selectedPiecePos != -1 && m_draggingSelectedPiece) {
 		const Piece* selPiece = m_pos->m_pieceOnTile[m_selectedPiecePos];
 		SDL_Rect pieceRect = { int(mouseCoords.x - tileSz * 0.7), int(mouseCoords.y - tileSz * 0.7), int(tileSz * 1.4), int(tileSz * 1.4) };
 		Presenter::drawPiece(selPiece->type, pieceRect, selPiece->black);
 	}
-
+	//Draw nukes (why?)
 	for (int i = 0; i < 8; i++) {
 		for (int j = 0; j < 8; j++) {
 			Drawable* drawTile = &m_tile[i][j];
@@ -171,12 +191,18 @@ void GraphicBoard::selectPiece(int2 mouseCoords) {
 
 				for (int i = 0; i < 64; i++) {
 					m_legalMoveTile[i] = 0;
+					m_SEE[i] = 0;
 				}
 				for (int i = 0; i < m_pos->m_legalMovesCnt; i++) {
 					if (getStartPos(m_pos->m_legalMoves[i]) == m_selectedPiecePos) {
 						m_legalMoveTile[getEndPos(m_pos->m_legalMoves[i])] = m_pos->m_legalMoves[i];
+						m_SEE[getEndPos(m_pos->m_legalMoves[i])] = m_pos->SEE(m_pos->m_legalMoves[i]);
 					}
 				}
+				//for (int i = 0; i < 64; i++) {
+				//	cout << setw(4) << m_SEE[i];
+				//	if (i % 8 == 7) { cout << '\n'; }
+				//}
 			}
 		}
 	}

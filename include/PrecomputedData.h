@@ -1,7 +1,9 @@
 #pragma once
 #include "misc.h"
 #include "Piece.h"
+#include <algorithm>
 #include <cinttypes>
+using std::clamp;
 
 extern const int8_t dirAdd[9];
 extern const int8_t dirAddX[9];
@@ -29,14 +31,44 @@ extern uint64_t mainDiagBitmask[15];
 extern uint64_t scndDiagBitmask[15];
 
 extern uint64_t betweenBitboard[64][64];
+//[0] - white kingside
+//[1] - white queenside
+//[2] - black kingside
+//[3] - black queenside
+extern uint64_t castlingImportantSquares[4];
 
-extern uint64_t castlingImportantSquares[4];//First white; First kingside
+//Static exchange evaluation lookup table
+//Note: here we FORCE opponent to capture, because we can just min(capture, noCapture)
+//Parameters:
+//    . 1st - kingsNum+1
+//    . 2nd - pawnsNum+2
+//    . 3rd - minorPcsNum+3
+//    . 4th - rooksNum+2
+//    . 5th - queensNum+1
+//    . Opponent pieces are considered negative
+extern int16_t seeLookup[3][5][7][5][3];
+
+inline int16_t getSee(const int8_t kings, const int8_t queens, const int8_t bishops, const int8_t knights, const int8_t rooks, const int8_t pawns) {
+	return seeLookup[clamp(kings + 1, 0, 2)][clamp(pawns + 2, 0, 4)]
+					[clamp(bishops + knights + 3, 0, 6)][clamp(rooks + 2, 0, 4)]
+					[clamp(queens + 1, 0, 2)];
+}
+inline int16_t getSee(const int8_t* pcsCnt) {
+	return getSee(pcsCnt[KING], pcsCnt[QUEEN], pcsCnt[BISHOP], pcsCnt[KNIGHT], pcsCnt[ROOK], pcsCnt[PAWN]);
+}
+inline int16_t getSee(const int8_t* pcsCntFriend, const int8_t* pcsCntEnemy) {
+	return getSee(	pcsCntFriend[KING] - pcsCntEnemy[KING],		pcsCntFriend[QUEEN] - pcsCntEnemy[QUEEN],
+					pcsCntFriend[BISHOP] - pcsCntEnemy[BISHOP], pcsCntFriend[KNIGHT] - pcsCntEnemy[KNIGHT],
+					pcsCntFriend[ROOK] - pcsCntEnemy[ROOK],		pcsCntFriend[PAWN] - pcsCntEnemy[PAWN]);
+}
 
 //Magic bitboards
 extern uint64_t rookMovesLookup[64][4096];
 extern uint64_t bishopMovesLookup[64][4096];
+//Magic hash lookup table used for determining whether to check 
+//if each king move is legal or to calculate enemy attacks
 //sz = 256, because i couldn't find numbers that fit in 8, 16, 32, 64, 128
-extern uint8_t kingMovesCntLookup[64][256];//Also a magic hash lookup table; 
+extern uint8_t kingMovesCntLookup[64][256];
 extern const uint64_t rookMagic[64];
 extern const uint64_t bishopMagic[64];
 extern const uint64_t kingMagic[64];
@@ -52,6 +84,7 @@ extern void populateBetweemBitboards();
 extern void populateMovesLookup();
 extern void populateGlobalDirectionBitmasks();//Populates rowBitmask[8], colBitmask[8], mainDiagBitmask[15], scndDiagBitmask[15]
 extern void populateKingMovesCnt();
+extern void populateSeeLookup();
 extern uint64_t calcRookAtt(const int8_t stSquare, const uint64_t blockers);
 extern uint64_t calcBishopAtt(const int8_t stSquare, const uint64_t blockers);
 extern uint64_t shiftIndexToABlockersBitmask(const int idx, const uint64_t relevantSq);
@@ -79,7 +112,7 @@ inline void prefetchAttacks(const int8_t sq, const uint64_t blockers) {
 }
 
 template<PieceType type>
-inline uint64_t attacks(const int8_t sq, const uint64_t blockers) {
+inline uint64_t attacks(const int8_t sq, const uint64_t blockers = 0) {
 	if constexpr (type == KNIGHT) {
 		return knightMovesLookup[sq];
 	}
@@ -98,13 +131,20 @@ inline uint64_t attacks(const int8_t sq, const uint64_t blockers) {
 	}
 	return 0;
 }
+
 template<bool blackToMove>
 inline uint64_t pawnAttacks(const int8_t sq) {
+	if (getY(sq) == 0 && blackToMove) { return 0; }
+	if (getY(sq) == 7 && !blackToMove) { return 0; }
 	if constexpr (blackToMove) {
-		return (getX(sq) != 0 ? 1 << (sq - 8 - 1) : 0) | (getX(sq) != 7 ? 1 << (sq - 8 + 1) : 0);
+		return (getX(sq) != 0 ? 1ULL << (sq - 8 - 1) : 0) | (getX(sq) != 7 ? 1ULL << (sq - 8 + 1) : 0);
 	} else {
-		return (getX(sq) != 0 ? 1 << (sq + 8 - 1) : 0) | (getX(sq) != 7 ? 1 << (sq + 8 + 1) : 0);
+		return (getX(sq) != 0 ? 1ULL << (sq + 8 - 1) : 0) | (getX(sq) != 7 ? 1ULL << (sq + 8 + 1) : 0);
 	}
+}
+
+inline uint64_t pawnAttacks(const bool black, const int8_t sq) {
+	return (black ? pawnAttacks<1>(sq) : pawnAttacks<0>(sq));
 }
 
 inline int8_t kingMovesCnt(const int8_t pos, const uint64_t friendlyBB) {

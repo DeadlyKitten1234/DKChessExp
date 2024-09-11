@@ -62,6 +62,7 @@ private:
 	Drawable** m_tile;
 	bool m_draggingSelectedPiece;
 	int16_t* m_legalMoveTile;
+	int16_t* m_SEE;
 	
 	Position* m_pos;
 	int8_t m_selectedPiecePos;

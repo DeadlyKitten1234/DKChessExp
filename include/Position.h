@@ -24,6 +24,10 @@ public:
 	void makeNullMove();
 	void undoNullMove(int8_t possibleEnPassant_);
 
+	uint64_t attackersTo(int8_t sq);
+	//Static exchange evaluation @returns Is capture good
+	int16_t SEE(int16_t move);
+
 	template<bool capturesOnly>
 	void updateLegalMoves(const bool calculateChecks = false);
 	template<bool capturesOnly>
@@ -47,6 +51,13 @@ public:
 		return drawMan.insufMaterial((black ? m_blackTotalPiecesCnt : m_whiteTotalPiecesCnt), (black ? m_blackPiecesCnt : m_whitePiecesCnt));
 	}
 	PieceType highestPiece(const bool black) const;
+	inline uint64_t pcsBB(const bool black, const PieceType pt = UNDEF) const {
+		return (black ? (pt == UNDEF ? m_blackAllPiecesBitboard : m_blackBitboards[pt]) : 
+						(pt == UNDEF ? m_whiteAllPiecesBitboard : m_whiteBitboards[pt]));
+	}
+	inline uint64_t pcsBB(const PieceType pt) const {
+		return m_whiteBitboards[pt] | m_blackBitboards[pt];
+	}
 
 	static const char* m_startFEN;
 

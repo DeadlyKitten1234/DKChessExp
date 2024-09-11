@@ -1,5 +1,6 @@
 #pragma once
 #include <cinttypes>
+#include <cmath>
 #include <xmmintrin.h>//_mm_prefetch
 
 inline int8_t getX(const int8_t pos) {
@@ -29,8 +30,7 @@ inline int8_t floorLog2(int num) {
 	num |= num >> 4;
 	num |= num >> 8;
 	num |= num >> 16;
-	num++;
-	return getLSBPos(num) - 1;
+	return getLSBPos(num + 1) - 1;
 }
 inline int16_t fastSqrt(int x) {
 	//Source: https://en.wikipedia.org/wiki/Fast_inverse_square_root
@@ -68,6 +68,10 @@ inline int8_t countOnes(uint64_t bitmask) {
 inline uint64_t shift(uint64_t number, int8_t amount) {
 	return (amount < 0 ? number >> (-amount) : number << amount);
 }
+inline int sigmoid(int x, int maxVal, int midVal, int steepness) {
+	return double(maxVal) / (1 + std::pow(1.1, midVal - (x * steepness)));
+}
+
 
 enum CacheLevel : int8_t {
 	L0 = 0,
@@ -101,7 +105,6 @@ public:
 	void init(int maxSz);
 
 	inline T top() const { return entry[endIdx - 1]; }
-	inline T kElFromTop(int k) const { return entry[endIdx - k - 1]; }
 	inline int size() const { return endIdx; }
 	inline bool empty() const { return endIdx == 0; }
 	inline void pop() { endIdx--; }

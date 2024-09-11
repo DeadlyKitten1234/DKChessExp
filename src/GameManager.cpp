@@ -10,7 +10,7 @@ GameManager::~GameManager() {
 
 void GameManager::update(const InputManager& input) {
 	if (playerAI[m_pos->m_blackToMove]) {
-		m_ai.startSearch(5);
+		m_ai.startSearch(50);
 
 		if (m_pos->isCapture(m_ai.bestMove)) {
 			Nuke::nukes[getEndPos(m_ai.bestMove) / 8][getEndPos(m_ai.bestMove) % 8].activate();

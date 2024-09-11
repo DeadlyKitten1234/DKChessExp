@@ -16,9 +16,24 @@ uint64_t mainDiagBitmask[15];
 uint64_t scndDiagBitmask[15];
 uint64_t betweenBitboard[64][64];
 
+//Static exchange evaluation lookup table
+//Note: here we FORCE opponent to capture, because we can just min(capture, noCapture)
+//Parameters:
+//    . 1st - kingsNum+1
+//    . 2nd - pawnsNum+2
+//    . 3rd - minorPcsNum+3
+//    . 4th - rooksNum+2
+//    . 5th - queensNum+1
+//    . Opponent pieces are considered negative
+int16_t seeLookup[3][5][7][5][3];
+
 uint64_t knightMovesLookup[64];
 uint64_t kingMovesLookup[64];
-uint64_t castlingImportantSquares[4];//First white; first kingside
+//[0] - white kingside
+//[1] - white queenside
+//[2] - black kingside
+//[3] - black queenside
+uint64_t castlingImportantSquares[4];
 uint64_t rookMovesLookup[64][4096];
 uint64_t bishopMovesLookup[64][4096];
 uint8_t kingMovesCntLookup[64][256];
@@ -65,6 +80,8 @@ void initData() {
 	populateBetweemBitboards();
 	//Zobrist
 	populateHashNums();
+	//SEE
+	populateSeeLookup();
 }
 
 void populateMovementBitmasks() {
@@ -182,6 +199,80 @@ void populateKingMovesCnt() {
 	}
 }
 
+PieceType lowestType(int* pcsCnt) {
+	if (pcsCnt[PAWN])	{ return PAWN; }
+	if (pcsCnt[KNIGHT]) { return KNIGHT; }
+	if (pcsCnt[BISHOP]) { return BISHOP; }
+	if (pcsCnt[ROOK])	{ return ROOK; }
+	if (pcsCnt[QUEEN])	{ return QUEEN; }
+	if (pcsCnt[KING])	{ return KING; }
+	return UNDEF;
+}
+#include <iostream>
+void populateSeeLookup() {
+	for (int kings = -1; kings <= 1; kings++) {
+		for (int pawns = -2; pawns <= 2; pawns++) {
+			for (int minors = -3; minors <= 3; minors++) {
+				for (int rooks = -2; rooks <= 2; rooks++) {
+					for (int queens = -1; queens <= 1; queens++) {
+						//Minors are addressed by [BISHOP]
+						int enemyPcs[6] =		{ max(0, -kings), max(0, -queens), max(0, -minors), 0, max(0, -rooks), max(0, -pawns) };
+						int friendlyPcs[6] =	{ max(0,  kings), max(0,  queens), max(0,  minors), 0, max(0,  rooks), max(0,  pawns) };
+						//Force capture
+						PieceType ptOnTile = lowestType(enemyPcs);
+						if (ptOnTile == UNDEF) {
+							seeLookup[kings + 1][pawns + 2][minors + 3][rooks + 2][queens + 1] = -1;
+							continue;
+						}
+						enemyPcs[ptOnTile]--;
+						bool friendlyToMove = true;
+						//Set bounds
+						int lBound = 0, hBound = pieceValue[ptOnTile];
+						int curScore = 0;
+						while (lBound < hBound) {
+							if (friendlyToMove) {
+								lBound = max(lBound, curScore);
+								if (lBound >= hBound) {
+									curScore = hBound;
+									break;
+								}
+								if (lowestType(friendlyPcs) == UNDEF) {
+									curScore = max(curScore, lBound);
+									break;
+								}
+								//Capture
+								curScore += pieceValue[ptOnTile];
+								ptOnTile = lowestType(friendlyPcs);
+								friendlyPcs[ptOnTile]--;
+							} else {
+								hBound = min(hBound, curScore);
+								if (lBound >= hBound) {
+									curScore = lBound;
+									break;
+								}
+								if (lowestType(enemyPcs) == UNDEF) {
+									curScore = min(curScore, hBound);
+									break;
+								}
+								//Capture
+								curScore -= pieceValue[ptOnTile];
+								ptOnTile = lowestType(enemyPcs);
+								enemyPcs[ptOnTile]--;
+							}
+
+							friendlyToMove = !friendlyToMove;
+						}
+						if (kings >= 0 && pawns >= 0 && minors >= 0 && rooks >= 0 && queens >= 0) {
+							curScore = -1;
+						}
+						seeLookup[kings + 1][pawns + 2][minors + 3][rooks + 2][queens + 1] = curScore;
+					}
+				}
+			}
+		}
+	}
+}
+
 uint64_t calcRookAtt(const int8_t stSquare, const uint64_t blockers) {
 	uint64_t ans = 0;
 	int x = getX(stSquare) - 1, y = getY(stSquare);
@@ -274,7 +365,7 @@ uint64_t shiftIndexToABlockersBitmask(const int idx, const uint64_t relevantSq) 
 		}
 	}
 	for (int j = 0; j < bits; j++) {
-		if ((idx & (1 << j)) != 0) {
+		if ((idx & (1ULL << j)) != 0) {
 			ans |= (1ULL << squareIdx[j]);
 		}
 	}

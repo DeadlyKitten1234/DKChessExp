@@ -510,6 +510,64 @@ void Position::undoNullMove(int8_t possibleEnPassant_) {
 	m_possibleEnPassant = possibleEnPassant_;
 }
 
+uint64_t Position::attackersTo(int8_t sq) {
+	const uint64_t allPcs = m_whiteAllPiecesBitboard | m_blackAllPiecesBitboard;
+	return	(attacks<KING>(sq) & (m_whiteBitboards[KING] | m_blackBitboards[KING])) |
+			(attacks<ROOK>(sq, allPcs) & (m_whiteBitboards[ROOK] | m_whiteBitboards[QUEEN] | m_blackBitboards[ROOK]) | m_blackBitboards[QUEEN]) |
+			(attacks<BISHOP>(sq, allPcs) & (m_whiteBitboards[BISHOP] | m_whiteBitboards[QUEEN] | m_blackBitboards[BISHOP]) | m_blackBitboards[QUEEN]) |
+			(attacks<KNIGHT>(sq) & (m_whiteBitboards[KNIGHT] | m_blackBitboards[KNIGHT])) |
+			((pawnAttacks<0>(sq) & m_whiteBitboards[PAWN]) | (pawnAttacks<1>(sq) & m_blackBitboards[PAWN]));
+}
+#include <iostream>
+int16_t Position::SEE(int16_t move) {
+	const int8_t stPos = getStartPos(move), sq = getEndPos(move);
+	const PieceType pt = m_pieceOnTile[stPos]->type;
+	//Don't care about castling and ep
+	if ((pt == PAWN && sq == m_possibleEnPassant) || isPromotion(move)) {
+		return 0;
+	}
+	if (pt == KING && abs(sq - stPos) == 2) {
+		return 0;
+	}
+	const bool stm = m_blackToMove;
+	const uint64_t allPcs = ((m_whiteAllPiecesBitboard | m_blackAllPiecesBitboard) & (~(1ULL << stPos))) | (1ULL << sq);
+	const uint64_t pcsNoB = allPcs & (~pcsBB(BISHOP)), pcsNoR = allPcs & (~pcsBB(ROOK));
+	const uint64_t pcsNoBR = pcsNoB & pcsNoR, legalSt = ~tilePinnedBitmask;
+	int8_t attCnt[2][6] = {
+		{
+			countOnes(attacks<KING>(sq)				& pcsBB(stm, KING)   & legalSt),
+			countOnes(attacks<QUEEN>(sq, pcsNoBR)	& pcsBB(stm, QUEEN)  & legalSt),
+			countOnes(attacks<BISHOP>(sq, pcsNoB)	& pcsBB(stm, BISHOP) & legalSt),
+			countOnes(attacks<KNIGHT>(sq)			& pcsBB(stm, KNIGHT) & legalSt),
+			countOnes(attacks<ROOK>(sq, pcsNoR)		& pcsBB(stm, ROOK)   & legalSt),
+			countOnes(pawnAttacks(!stm, sq)			& pcsBB(stm, PAWN)   & legalSt)
+		},
+		{
+			countOnes(attacks<KING>(sq)				& pcsBB(!stm, KING)   & legalSt),
+			countOnes(attacks<QUEEN>(sq, pcsNoBR)	& pcsBB(!stm, QUEEN)  & legalSt),
+			countOnes(attacks<BISHOP>(sq, pcsNoB)	& pcsBB(!stm, BISHOP) & legalSt),
+			countOnes(attacks<KNIGHT>(sq)			& pcsBB(!stm, KNIGHT) & legalSt),
+			countOnes(attacks<ROOK>(sq, pcsNoR)		& pcsBB(!stm, ROOK)   & legalSt),
+			countOnes(pawnAttacks(stm, sq)			& pcsBB(!stm, PAWN)   & legalSt)
+		}
+	};
+	//Ingore pins, where both pieces attack the sq, because its very
+	//rare and they have minimal impact and are not worth the check
+	//Also ignore X-Rays where more valuable piece is in front, because
+	//they have minimal impact and are not worth the check
+	//(and also too lazy to write the code)
+	//See ChessAI/SEE_Lookup_Argumentation.txt for more details
+
+	//TODO: Stage opponent capture
+
+	int addScore = (m_pieceOnTile[sq] == nullptr ? 0 : pieceValue[m_pieceOnTile[sq]->type]);
+	if (!(pt == PAWN && addScore == 0)) {
+		attCnt[0][pt]--;
+	}
+	int16_t see = getSee(attCnt[0], attCnt[1]);
+	return addScore + min((see == -1 ? 0 : see - pieceValue[pt]), 0);
+}
+
 void Position::deleteData() {
 	if (m_whitePiece != nullptr) {
 		for (int i = 0; i < m_whiteTotalPiecesCnt; i++) {
