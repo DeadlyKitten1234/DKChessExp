@@ -56,6 +56,7 @@ private:
 	int16_t rootMoveIndices[256];
 
 	int inScout;
+	bool rootRep;
 
 	//<https://www.chessprogramming.org/History_Heuristic> 
 	//Addressed by color, piece type, end square
@@ -74,6 +75,8 @@ private:
 	int inNullMoveSearch;
 	static const int NULL_MOVE_DEFEND_BONUS;
 	static const int NULL_MOVE_MATE_DEFEND_BONUS;
+	//Addressed by ply from root
+	int16_t threats[128];
 
 	//<https://www.chessprogramming.org/Killer_Heuristic>
 	//Addressed by ply from root (second param is just to have 2 killers) 
@@ -82,8 +85,7 @@ private:
 	inline void updateKillers(int16_t newMove) {
 		if (killers[movesHistory.size()][0] == nullMove) {
 			killers[movesHistory.size()][0] = newMove;
-		}
-		else {
+		} else {
 			if (killers[movesHistory.size()][1] != nullMove) {
 				killers[movesHistory.size()][0] = killers[movesHistory.size()][1];
 			}
@@ -91,4 +93,6 @@ private:
 		}
 	}
 
+	//<https://www.chessprogramming.org/Extensions>
+	int8_t curExtentions;
 };

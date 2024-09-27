@@ -518,7 +518,7 @@ uint64_t Position::attackersTo(int8_t sq) {
 			(attacks<KNIGHT>(sq) & (m_whiteBitboards[KNIGHT] | m_blackBitboards[KNIGHT])) |
 			((pawnAttacks<0>(sq) & m_whiteBitboards[PAWN]) | (pawnAttacks<1>(sq) & m_blackBitboards[PAWN]));
 }
-#include <iostream>
+
 int16_t Position::SEE(int16_t move) {
 	const int8_t stPos = getStartPos(move), sq = getEndPos(move);
 	const PieceType pt = m_pieceOnTile[stPos]->type;
@@ -529,9 +529,9 @@ int16_t Position::SEE(int16_t move) {
 	if (pt == KING && abs(sq - stPos) == 2) {
 		return 0;
 	}
-	const bool stm = m_blackToMove;
+	const bool stm = m_pieceOnTile[stPos]->black;
 	const uint64_t allPcs = ((m_whiteAllPiecesBitboard | m_blackAllPiecesBitboard) & (~(1ULL << stPos))) | (1ULL << sq);
-	const uint64_t pcsNoB = allPcs & (~pcsBB(BISHOP)), pcsNoR = allPcs & (~pcsBB(ROOK));
+	const uint64_t pcsNoB = allPcs & (~(pcsBB(BISHOP) | pawnAttacks<0>(sq) | pawnAttacks<1>(sq))), pcsNoR = allPcs & (~pcsBB(ROOK));
 	const uint64_t pcsNoBR = pcsNoB & pcsNoR, legalSt = ~tilePinnedBitmask;
 	int8_t attCnt[2][6] = {
 		{
@@ -558,14 +558,20 @@ int16_t Position::SEE(int16_t move) {
 	//(and also too lazy to write the code)
 	//See ChessAI/SEE_Lookup_Argumentation.txt for more details
 
-	//TODO: Stage opponent capture
-
 	int addScore = (m_pieceOnTile[sq] == nullptr ? 0 : pieceValue[m_pieceOnTile[sq]->type]);
 	if (!(pt == PAWN && addScore == 0)) {
 		attCnt[0][pt]--;
 	}
-	int16_t see = getSee(attCnt[0], attCnt[1]);
-	return addScore + min((see == -1 ? 0 : see - pieceValue[pt]), 0);
+	//Stage opponent capture
+	PieceType oppLowestPt = lowestType(attCnt[1]);
+	if (oppLowestPt == UNDEF) { return addScore; }
+	attCnt[1][oppLowestPt]--;
+	//Lookup eval with swapped frirendly and opponent pieces
+	int16_t see = getSee(attCnt[1], attCnt[0]);
+	//Correct eval
+	int16_t oppCaptureEval = max<int16_t>((see == -1 ? 0 : -see + pieceValue[oppLowestPt]), 0) - pieceValue[pt];
+	//Min eval with if opponent handn't captured
+	return addScore + min<int16_t>(oppCaptureEval, 0);
 }
 
 void Position::deleteData() {
