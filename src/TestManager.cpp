@@ -110,6 +110,7 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 	uint64_t repHistory[1024];
 	int16_t stalemates = 0, draw50 = 0, drawInsuf = 0, drawRep = 0;
 	bool twice[1024], flipped = 0;
+	uint64_t stTime = Clock::now();
 	for (int c = 0; c < numberOfGames; c++) {
 		tt.clear();
 		aiBad.ttCmp.clear();
@@ -218,6 +219,10 @@ void compareAI(World& world, Position* pos, int numberOfGames, int timeToMove) {
 		for (int i = 0; i < drawInsuf; i++) { cout << '#'; }
 		cout << "\nLoses:\n";
 		for (int i = 0; i < loses; i++) { cout << '#'; }
+		int totalGames = wins + draws + loses;
+		cout << "\nEstimated time:\n";
+		uint64_t waitTime = ((Clock::now() - stTime) / totalGames) * (numberOfGames - totalGames);
+		Clock::printTime(waitTime);
 		//Used for backup if someting goes wrong
 		out << wins << ' ' << draws << ' ' << loses << '\n';
 	}

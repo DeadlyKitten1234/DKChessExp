@@ -19,7 +19,7 @@ inline int8_t getDiagS(const int8_t pos) {
 inline int8_t getLSBPos(const uint64_t bitmask) {
 	unsigned long idx;
 	_BitScanForward64(&idx, bitmask);
-	return idx;
+	return int8_t(idx);
 }
 inline int8_t floorLog2(int num) {
 	if (num < 0) {
@@ -55,7 +55,7 @@ inline int16_t fastSqrt(int x) {
 	if (neg) {
 		y = -y;
 	}
-	return 1/y;
+	return int16_t(1/y);
 }
 inline int8_t countOnes(uint64_t bitmask) {
 	int8_t ans = 0;
@@ -69,7 +69,7 @@ inline uint64_t shift(uint64_t number, int8_t amount) {
 	return (amount < 0 ? number >> (-amount) : number << amount);
 }
 inline int sigmoid(int x, int maxVal, int midVal, int steepness) {
-	return double(maxVal) / (1 + std::pow(1.1, midVal - (x * steepness)));
+	return int(double(maxVal) / (1 + std::pow(1.1, midVal - (x * steepness))));
 }
 
 

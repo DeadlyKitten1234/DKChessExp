@@ -34,6 +34,19 @@ bool DrawManager::checkForRep() const {
 	return false;
 }
 
+bool DrawManager::checkLastStateRepTwice() const {
+	if (repHistorySz <= 2) {
+		return false;
+	}
+	const uint64_t hashToCompare = repHistory[repHistorySz - 1];
+	for (int i = repHistorySz - 3; i >= repHistorySz - rule50count; i -= 2) {
+		if (repHistory[i] == hashToCompare) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool DrawManager::insufMaterial(int8_t totalPcsCnt, int8_t* piecesCnt) const {
 	if (totalPcsCnt == 1) {//Only king
 		return true;

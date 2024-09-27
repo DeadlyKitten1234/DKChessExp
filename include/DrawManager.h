@@ -11,6 +11,7 @@ public:
 	void popGameState() { repHistorySz--; };
 	bool checkForRule50() const { return rule50count >= 100; };
 	bool checkForRep() const;
+	bool checkLastStateRepTwice() const;
 	bool insufMaterial(int8_t totalPcsCnt, int8_t* piecesCnt) const;
 
 	int8_t rule50count;

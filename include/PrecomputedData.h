@@ -77,6 +77,8 @@ extern int8_t bishopRelevantSqCnt[64];
 extern uint64_t rookRelevantSq[64];
 extern uint64_t bishopRelevantSq[64];
 
+extern PieceType lowestType(int8_t* pcsCnt);
+
 extern inline void initData();
 
 extern void populateMovementBitmasks();

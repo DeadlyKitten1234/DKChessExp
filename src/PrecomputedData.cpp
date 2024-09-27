@@ -199,7 +199,7 @@ void populateKingMovesCnt() {
 	}
 }
 
-PieceType lowestType(int* pcsCnt) {
+PieceType lowestType(int8_t* pcsCnt) {
 	if (pcsCnt[PAWN])	{ return PAWN; }
 	if (pcsCnt[KNIGHT]) { return KNIGHT; }
 	if (pcsCnt[BISHOP]) { return BISHOP; }
@@ -208,7 +208,7 @@ PieceType lowestType(int* pcsCnt) {
 	if (pcsCnt[KING])	{ return KING; }
 	return UNDEF;
 }
-#include <iostream>
+
 void populateSeeLookup() {
 	for (int kings = -1; kings <= 1; kings++) {
 		for (int pawns = -2; pawns <= 2; pawns++) {
@@ -216,8 +216,8 @@ void populateSeeLookup() {
 				for (int rooks = -2; rooks <= 2; rooks++) {
 					for (int queens = -1; queens <= 1; queens++) {
 						//Minors are addressed by [BISHOP]
-						int enemyPcs[6] =		{ max(0, -kings), max(0, -queens), max(0, -minors), 0, max(0, -rooks), max(0, -pawns) };
-						int friendlyPcs[6] =	{ max(0,  kings), max(0,  queens), max(0,  minors), 0, max(0,  rooks), max(0,  pawns) };
+						int8_t enemyPcs[6] =		{ max(0, -kings), max(0, -queens), max(0, -minors), 0, max(0, -rooks), max(0, -pawns) };
+						int8_t friendlyPcs[6] =	{ max(0,  kings), max(0,  queens), max(0,  minors), 0, max(0,  rooks), max(0,  pawns) };
 						//Force capture
 						PieceType ptOnTile = lowestType(enemyPcs);
 						if (ptOnTile == UNDEF) {

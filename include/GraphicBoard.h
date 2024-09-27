@@ -19,8 +19,8 @@ public:
 	void render(Drawable* tile) {
 		if (!active) { return; }
 		SDL_Rect dstRect = tile->m_rect;
-		dstRect.x += dstRect.w / 2 - dstRect.w * 0.625;
-		dstRect.y += dstRect.h / 2 - dstRect.h * 0.625;
+		dstRect.x += int(dstRect.w / 2 - dstRect.w * 0.625);
+		dstRect.y += int(dstRect.h / 2 - dstRect.h * 0.625);
 		dstRect.w *= 1.25;
 		dstRect.h *= 1.25;
 		SDL_RenderCopy(Presenter::m_mainRenderer, tex, &srcRect, &dstRect);

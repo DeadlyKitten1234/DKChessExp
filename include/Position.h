@@ -25,7 +25,7 @@ public:
 	void undoNullMove(int8_t possibleEnPassant_);
 
 	uint64_t attackersTo(int8_t sq);
-	//Static exchange evaluation @returns Is capture good
+	//Static exchange evaluation @returns Eval of trade
 	int16_t SEE(int16_t move);
 
 	template<bool capturesOnly>
