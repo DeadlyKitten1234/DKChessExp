@@ -17,6 +17,7 @@ AI::AI() {
 	inNullMoveSearch = 0;
 	inScout = 0;
 	curExtentions = 0;
+	rootRep = false;
 }
 
 AI::~AI() {
@@ -64,6 +65,7 @@ void AI::resetHistory() {
 		killers[i][0] = killers[i][1] = nullMove;
 		threats[i] = nullMove;
 	}
+	rootRep = false;
 }
 
 void AI::updateHistoryNewSearch() {
@@ -90,6 +92,8 @@ void AI::updateHistoryNewSearch() {
 
 #include <iomanip>//setw() when outputing info
 inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
+	rootRep = false;// pos->drawMan.checkLastStateRepTwice();
+
 	bool foundRootInTT = false;
 	TTEntry* ttRoot = tt.find(pos->zHash, foundRootInTT);
 
@@ -105,7 +109,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
 
 	int16_t eval = pos->evaluate();
 	int16_t lastEval = 0;
-	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) { 
+	for (int8_t i = min<int8_t>(depth, 2); i <= depth; i++) {
 		if (i < 0 || i == 127) {
 			break;
 		}
@@ -120,7 +124,7 @@ inline int16_t AI::iterativeDeepening(int8_t depth, bool printRes) {
 			if (Clock::now() >= searchEndTime) {
 				break;
 			}
-			
+
 			curEval = search<Root>(i, alpha, beta, false);
 			if (curEval <= alpha) {
 				beta = (alpha + beta) / 2;
@@ -202,8 +206,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 	int16_t movesCnt, moves[256], bestMoveAfterNull = nullMove, curBestMove = nullMove;
 	int16_t bestValue = -pieceValue[KING], nmScoreDelta = 0;
 	const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
-	const bool abCloseToMate =	abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
-								abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
+	const bool abCloseToMate = abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
+		abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
 	//Fail low means no move gives a score > alpha
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1, foundTTEntry = 0;
@@ -353,7 +357,13 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			if (root) {
 				bestMove = ttEntryRes->bestMove;
 			}
-			return max(alpha, ttEntryRes->eval);
+			if (root && rootRep) {
+				if (ttEntryRes->eval <= 0) {
+					return ttEntryRes->eval;
+				}
+			} else {
+				return max(alpha, ttEntryRes->eval);
+			}
 		}
 	}
 
@@ -365,7 +375,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 
 	int16_t moveIndices[256];
 	//if (!(root && depth >= 8)) {
-		orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, nmScoreDelta);
+	orderMoves(moves, movesCnt, moveIndices, ttBestMove, bestMoveAfterNull, nmScoreDelta);
 	//} else {
 	//	memcpy(moveIndices, rootMoveIndices, movesCnt * sizeof(int16_t));
 	//}
@@ -449,6 +459,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 		const int16_t curMove = moves[moveIndices[i]];
 		const int8_t moveSt = getStartPos(curMove), moveEnd = getEndPos(curMove);
 		const bool quiet = pos->isCapture(curMove) && !isPromotion(curMove) && !givesCheck(curMove);
+		//const int16_t moveSee = pos->SEE(curMove);
 		//Uncertainty cutoffs https://www.chessprogramming.org/Uncertainty_Cut-Offs
 		if ((inScout && i > 6) && !pos->isCapture(curMove) && !isPromotion(curMove) && !(givesCheck(curMove) && abCloseToMate)) {
 			return alpha;
@@ -468,13 +479,13 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			break;
 		}
 		//Taken from stockfish and added conditions for hh, cMove and killers
-		if (!root && !pos->friendlyInCheck && depth <= 8 && !abCloseToMate && quiet && 
+		if (!root && !pos->friendlyInCheck && depth <= 8 && !abCloseToMate && quiet &&
 			eval + evalIncrease + pieceValue[PAWN] * depth / 2 + (bestValue < eval - 57 ? 114 : 57) <= alpha) {
 			const int8_t lastMoveEnd = getEndPos(movesHistory.top());
 
 			int hh = historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd];
 			int const cMove = (lastWasNull ? nullMove : counterMove[pos->m_blackToMove][pos->m_pieceOnTile[lastMoveEnd]->type][lastMoveEnd]);
-			if (hh <= MAX_HISTORY / 8 && curMove != cMove && 
+			if (hh <= MAX_HISTORY / 8 && curMove != cMove &&
 				curMove != killers[movesHistory.size()][0] && curMove != killers[movesHistory.size()][1]) {
 
 				continue;
@@ -546,7 +557,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			int clampedBonus = std::clamp(depth * depth, -MAX_HISTORY, MAX_HISTORY);
 			if (!pos->isCapture(curMove)) {
 				//Update history heuristic
-				int*  hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd];
+				int* hh = &historyHeuristic[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd];
 				*hh += clampedBonus - *hh * clampedBonus / MAX_HISTORY;
 				//Update counter moves heuristic
 				if (!movesHistory.empty() && movesHistory.top() != nullMove) {
@@ -582,7 +593,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			}
 		}
 	}
-	
+
 	if (root) {
 		pos->m_legalMovesCnt = movesCnt;
 	}
@@ -681,7 +692,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		if (i != movesCnt - 1) {
 			prefetch((const char*)&tt.chunk[pos->getZHashIfMoveMade(moves[moveIndices[i + 1]]) >> tt.shRVal]);
 		}
-		
+
 		const int16_t curMove = moves[moveIndices[i]];
 		const int16_t see = pos->SEE(curMove);
 		//If can't improve alpha, don't search move; This is (i think) delta pruning
@@ -748,7 +759,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	if (!foundTTEntry ||
 		(foundTTEntry && ttEntryRes->depth <= 0 && //Unless found a qsearch entry and
 		//we have exact or we have a better high bound
-		(!failLow || (ttEntryRes->boundType() == HighBound && ttEntryRes->eval > alpha)))) {
+			(!failLow || (ttEntryRes->boundType() == HighBound && ttEntryRes->eval > alpha)))) {
 
 		//Here can write high bound if failLow and exact otherwise, because 
 		//it only affect qsearch, because in main search we check if
@@ -758,9 +769,9 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 	return alpha;
 }
 
-inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices, 
-							int16_t ttBestMove, int16_t bestMoveAfterNull, int16_t nmScoreDelta) {
-	
+inline void AI::orderMoves(int16_t* moves, int16_t movesCnt, int16_t* indices,
+	int16_t ttBestMove, int16_t bestMoveAfterNull, int16_t nmScoreDelta) {
+
 	const uint64_t allPcs = pos->m_whiteAllPiecesBitboard | pos->m_blackAllPiecesBitboard;
 	const int8_t enemyKingPos = (pos->m_blackToMove ? pos->m_whitePiece[0]->pos : pos->m_blackPiece[0]->pos);
 	const int8_t friendlyKingPos = (pos->m_blackToMove ? pos->m_blackPiece[0]->pos : pos->m_whitePiece[0]->pos);
@@ -769,13 +780,13 @@ inline void AI::orderMoves	(int16_t* moves, int16_t movesCnt, int16_t* indices,
 	int8_t bmAfterNullEnd = (bestMoveAfterNull == nullMove ? -1 : getEndPos(bestMoveAfterNull));
 	uint64_t nullDefenders[6] = { 0, 0, 0, 0, 0, 0 };
 	if (bestMoveAfterNull != nullMove) {
-		nullDefenders[KING]		= attacks<KING>		(bmAfterNullEnd, allPcs);
-		nullDefenders[BISHOP]	= attacks<BISHOP>	(bmAfterNullEnd, allPcs);
-		nullDefenders[KNIGHT]	= attacks<KNIGHT>	(bmAfterNullEnd, allPcs);
-		nullDefenders[ROOK]		= attacks<ROOK>		(bmAfterNullEnd, allPcs);
+		nullDefenders[KING] = attacks<KING>(bmAfterNullEnd, allPcs);
+		nullDefenders[BISHOP] = attacks<BISHOP>(bmAfterNullEnd, allPcs);
+		nullDefenders[KNIGHT] = attacks<KNIGHT>(bmAfterNullEnd, allPcs);
+		nullDefenders[ROOK] = attacks<ROOK>(bmAfterNullEnd, allPcs);
 		if (pos->m_blackToMove) { nullDefenders[PAWN] = pawnAttacks<0>(bmAfterNullEnd); }
 		else					{ nullDefenders[PAWN] = pawnAttacks<1>(bmAfterNullEnd); }
-		nullDefenders[QUEEN]	= nullDefenders[BISHOP] | nullDefenders[ROOK];
+		nullDefenders[QUEEN] = nullDefenders[BISHOP] | nullDefenders[ROOK];
 	}
 	bool nmIsBigCapture = 0, mateIfNullMove = (nmScoreDelta >= pieceValue[KING] - MAX_PLY_MATE);
 	bool nmIsCapture = (bestMoveAfterNull != nullMove && pos->isCapture(bestMoveAfterNull));

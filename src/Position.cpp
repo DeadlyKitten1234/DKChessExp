@@ -510,7 +510,7 @@ void Position::undoNullMove(int8_t possibleEnPassant_) {
 	m_possibleEnPassant = possibleEnPassant_;
 }
 
-uint64_t Position::attackersTo(int8_t sq) {
+uint64_t Position::attackersTo(int8_t sq) const {
 	const uint64_t allPcs = m_whiteAllPiecesBitboard | m_blackAllPiecesBitboard;
 	return	(attacks<KING>(sq) & (m_whiteBitboards[KING] | m_blackBitboards[KING])) |
 			(attacks<ROOK>(sq, allPcs) & (m_whiteBitboards[ROOK] | m_whiteBitboards[QUEEN] | m_blackBitboards[ROOK]) | m_blackBitboards[QUEEN]) |
@@ -519,7 +519,7 @@ uint64_t Position::attackersTo(int8_t sq) {
 			((pawnAttacks<0>(sq) & m_whiteBitboards[PAWN]) | (pawnAttacks<1>(sq) & m_blackBitboards[PAWN]));
 }
 
-int16_t Position::SEE(int16_t move) {
+int16_t Position::SEE(int16_t move) const {
 	const int8_t stPos = getStartPos(move), sq = getEndPos(move);
 	const PieceType pt = m_pieceOnTile[stPos]->type;
 	//Don't care about castling and ep

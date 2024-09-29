@@ -24,9 +24,9 @@ public:
 	void makeNullMove();
 	void undoNullMove(int8_t possibleEnPassant_);
 
-	uint64_t attackersTo(int8_t sq);
+	uint64_t attackersTo(int8_t sq) const;
 	//Static exchange evaluation @returns Eval of trade
-	int16_t SEE(int16_t move);
+	int16_t SEE(int16_t move) const;
 
 	template<bool capturesOnly>
 	void updateLegalMoves(const bool calculateChecks = false);
