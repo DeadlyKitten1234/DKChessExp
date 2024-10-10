@@ -23,7 +23,7 @@ bool DrawManager::checkForRep() const {
 	}
 	const uint64_t hashToCompare = repHistory[repHistorySz - 1];
 	bool foundOnce = false;
-	for (int i = repHistorySz - 3; i >= repHistorySz - rule50count; i -= 2) {
+	for (int i = repHistorySz - 3; i >= repHistorySz - 1 - rule50count; i -= 2) {
 		if (repHistory[i] == hashToCompare) {
 			if (foundOnce) {
 				return true;
@@ -39,7 +39,7 @@ bool DrawManager::checkLastStateRepTwice() const {
 		return false;
 	}
 	const uint64_t hashToCompare = repHistory[repHistorySz - 1];
-	for (int i = repHistorySz - 3; i >= repHistorySz - rule50count; i -= 2) {
+	for (int i = repHistorySz - 3; i >= repHistorySz - 1 - rule50count; i -= 2) {
 		if (repHistory[i] == hashToCompare) {
 			return true;
 		}

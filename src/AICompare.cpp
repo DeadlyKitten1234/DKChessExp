@@ -397,7 +397,7 @@ inline int16_t AICompare::search(int8_t depth, int16_t alpha, int16_t beta, bool
 						int* ch = &captureHistory[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd][pos->m_pieceOnTile[moveEnd]->type];
 						*ch += clampedBonus - *ch * clampedBonus / MAX_HISTORY;
 					}
-					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, ttCmp.gen, LowBound);
+					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, ttCmp.gen, LowBound, 0);
 					return res;
 				}
 			}
@@ -434,7 +434,7 @@ inline int16_t AICompare::search(int8_t depth, int16_t alpha, int16_t beta, bool
 					int* ch = &captureHistory[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd][pos->m_pieceOnTile[moveEnd]->type];
 					*ch += clampedBonus - *ch * clampedBonus / MAX_HISTORY;
 				}
-				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, ttCmp.gen, LowBound);
+				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, ttCmp.gen, LowBound, 0);
 				return res;
 			}
 		}
@@ -535,7 +535,7 @@ inline int16_t AICompare::search(int8_t depth, int16_t alpha, int16_t beta, bool
 
 		//Beta cutoff
 		if (res >= beta) {
-			ttEntryRes->init(pos->zHash, curMove, res, depth, ttCmp.gen, BoundType::LowBound);
+			ttEntryRes->init(pos->zHash, curMove, res, depth, ttCmp.gen, BoundType::LowBound, 0);
 			int clampedBonus = std::clamp(depth * depth, -MAX_HISTORY, MAX_HISTORY);
 			if (!pos->isCapture(curMove)) {
 				//Update history heuristic
@@ -586,7 +586,7 @@ inline int16_t AICompare::search(int8_t depth, int16_t alpha, int16_t beta, bool
 	if (foundTTEntry && curBestMove == nullMove) {
 		curBestMove = ttEntryRes->bestMove;
 	}
-	ttEntryRes->init(pos->zHash, curBestMove, bestValue, depth, ttCmp.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
+	ttEntryRes->init(pos->zHash, curBestMove, bestValue, depth, ttCmp.gen, (failLow ? BoundType::HighBound : BoundType::Exact), 0);
 	return alpha;
 }
 
@@ -712,7 +712,7 @@ inline int16_t AICompare::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 				//Unless found a qsearch entry with a less useful lower bound
 				(foundTTEntry && ttEntryRes->depth <= 0 && ttEntryRes->boundType() == LowBound && ttEntryRes->eval < res)) {
 
-				ttEntryRes->init(pos->zHash, curMove, res, 0, ttCmp.gen, BoundType::LowBound);
+				ttEntryRes->init(pos->zHash, curMove, res, 0, ttCmp.gen, BoundType::LowBound, 0);
 			}
 			return res;
 		}
@@ -735,7 +735,7 @@ inline int16_t AICompare::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		//Here can write high bound if failLow and exact otherwise, because 
 		//it only affect qsearch, because in main search we check if
 		//ttEntry->depth >= depth, and here we write with depth = 0
-		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, ttCmp.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
+		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, ttCmp.gen, (failLow ? BoundType::HighBound : BoundType::Exact), 0);
 	}
 	return alpha;
 }

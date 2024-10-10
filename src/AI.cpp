@@ -208,6 +208,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 	const bool lastWasNull = (!movesHistory.empty() && movesHistory.top() == nullMove);
 	const bool abCloseToMate = abs((abs(alpha) - pieceValue[KING])) <= MAX_PLY_MATE ||
 		abs((abs(beta) - pieceValue[KING])) <= MAX_PLY_MATE;
+	const bool posRepTwice = pos->drawMan.checkLastStateRepTwice();
 	//Fail low means no move gives a score > alpha
 	//Starts with 1 and is set to 0 if a score > alpha is achieved
 	bool failLow = 1, foundTTEntry = 0;
@@ -328,7 +329,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 	//Probe tt
 	TTEntry* ttEntryRes = tt.find(pos->zHash, foundTTEntry);
 	int16_t ttBestMove = (foundTTEntry && ttEntryRes->depth != 0 ? ttEntryRes->bestMove : nullMove);
-	if (foundTTEntry && ttEntryRes->depth >= depth) {
+	if (foundTTEntry && ttEntryRes->depth >= depth && !(posRepTwice && !ttEntryRes->posRep())) {
 		//Renew gen (make it more valuable when deciding which entry to overwrite)
 		ttEntryRes->setGen(tt.gen);
 		//Lower bound
@@ -410,7 +411,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 						int* ch = &captureHistory[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd][pos->m_pieceOnTile[moveEnd]->type];
 						*ch += clampedBonus - *ch * clampedBonus / MAX_HISTORY;
 					}
-					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound);
+					ttEntryRes->init(pos->zHash, curMove, res, depth - multiCutDepthR, tt.gen, LowBound, posRepTwice);
 					killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 					return res;
 				}
@@ -447,7 +448,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 					int* ch = &captureHistory[pos->m_blackToMove][pos->m_pieceOnTile[moveSt]->type][moveEnd][pos->m_pieceOnTile[moveEnd]->type];
 					*ch += clampedBonus - *ch * clampedBonus / MAX_HISTORY;
 				}
-				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound);
+				ttEntryRes->init(pos->zHash, curMove, res, depth - probCutDepthR, tt.gen, LowBound, posRepTwice);
 				killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 				return res;
 			}
@@ -491,6 +492,22 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 				continue;
 			}
 		}
+		bool lmr = (depth >= 2 && i > 1 + root && quiet);
+		int8_t newDepth = depth, extension = 0;
+		//Calculate extensions
+		if (!lmr) {
+			//<https://www.chessprogramming.org/Check_Extensions>
+			extension += (curExtentions <= 12 && (givesCheck(curMove) || movesCnt == 1));
+			if (givesCheck(curMove)) {
+				extension -= 2 * (pos->SEE(curMove) <= -pieceValue[KNIGHT]);
+			}
+			if (evalIncrease != 0) {
+				extension += std::clamp(pos->SEE(curMove) / pieceValue[KNIGHT], -3, 2);
+			}
+			if (pos->m_pieceOnTile[moveSt]->type == PAWN && getY(moveEnd) == (pos->m_blackToMove ? 1 : 6)) {
+				extension += 1 - 2 * (pos->SEE(curMove) <= -50);
+			}
+		}
 
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
@@ -498,8 +515,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 
 		//Search
 		int16_t res = 0;
-		int8_t newDepth = depth, extention = 0;
-		if (depth >= 2 && i > 1 + root && quiet) {
+		if (lmr) {
 			//Late move reductions
 			inScout++;
 			res = -search<NonPV>((newDepth - 2 + pvNode) - 1, -alpha - 1, -alpha, true);
@@ -509,11 +525,8 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 				res = -search<NonPV>(newDepth - 1, -alpha - 1, -alpha, !cutNode);
 			}
 		} else {
-			//<https://www.chessprogramming.org/Check_Extensions>
-			extention += (curExtentions <= 12 && givesCheck(curMove));
-
-			curExtentions += extention;
-			newDepth += extention;
+			curExtentions += extension;
+			newDepth += extension;
 			if (i == 0 && pvNode) {
 				res = -search<PV>(newDepth - 1, -beta, -alpha, false);
 			} else {
@@ -528,7 +541,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 		if (res > alpha && pvNode && beta - alpha > 1) {
 			res = -search<PV>(newDepth - 1, -beta, -alpha, false);
 		}
-		curExtentions -= extention;
+		curExtentions -= extension;
 
 		killers[movesHistory.size() + 2][0] = killers[movesHistory.size() + 2][1] = nullMove;
 
@@ -553,7 +566,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 
 		//Beta cutoff
 		if (res >= beta) {
-			ttEntryRes->init(pos->zHash, curMove, res, depth, tt.gen, BoundType::LowBound);
+			ttEntryRes->init(pos->zHash, curMove, res, depth, tt.gen, BoundType::LowBound, posRepTwice);
 			int clampedBonus = std::clamp(depth * depth, -MAX_HISTORY, MAX_HISTORY);
 			if (!pos->isCapture(curMove)) {
 				//Update history heuristic
@@ -602,7 +615,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 	if (foundTTEntry && curBestMove == nullMove) {
 		curBestMove = ttEntryRes->bestMove;
 	}
-	ttEntryRes->init(pos->zHash, curBestMove, bestValue, depth, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
+	ttEntryRes->init(pos->zHash, curBestMove, bestValue, depth, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact), posRepTwice);
 	return alpha;
 }
 
@@ -745,7 +758,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 				//Unless found a qsearch entry with a less useful lower bound
 				(foundTTEntry && ttEntryRes->depth <= 0 && ttEntryRes->boundType() == LowBound && ttEntryRes->eval < res)) {
 
-				ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound);
+				ttEntryRes->init(pos->zHash, curMove, res, 0, tt.gen, BoundType::LowBound, false);
 			}
 			return res;
 		}
@@ -764,7 +777,7 @@ inline int16_t AI::searchOnlyCaptures(int16_t alpha, int16_t beta) {
 		//Here can write high bound if failLow and exact otherwise, because 
 		//it only affect qsearch, because in main search we check if
 		//ttEntry->depth >= depth, and here we write with depth = 0
-		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact));
+		ttEntryRes->init(pos->zHash, curBestMove, alpha, 0, tt.gen, (failLow ? BoundType::HighBound : BoundType::Exact), false);
 	}
 	return alpha;
 }

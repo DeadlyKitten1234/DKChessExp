@@ -520,7 +520,11 @@ uint64_t Position::attackersTo(int8_t sq) const {
 }
 
 int16_t Position::SEE(int16_t move) const {
-	const int8_t stPos = getStartPos(move), sq = getEndPos(move);
+	int8_t stPos = getStartPos(move), sq = getEndPos(move);
+	if (m_pieceOnTile[stPos] == nullptr) {
+		stPos = sq;
+	}
+
 	const PieceType pt = m_pieceOnTile[stPos]->type;
 	//Don't care about castling and ep
 	if ((pt == PAWN && sq == m_possibleEnPassant) || isPromotion(move)) {
@@ -558,9 +562,11 @@ int16_t Position::SEE(int16_t move) const {
 	//(and also too lazy to write the code)
 	//See ChessAI/SEE_Lookup_Argumentation.txt for more details
 
-	int addScore = (m_pieceOnTile[sq] == nullptr ? 0 : pieceValue[m_pieceOnTile[sq]->type]);
+	int addScore = (m_pieceOnTile[sq] == nullptr && stPos != sq ? 0 : pieceValue[m_pieceOnTile[sq]->type]);
 	if (!(pt == PAWN && addScore == 0)) {
-		attCnt[0][pt]--;
+		if (stPos != sq) {
+			attCnt[0][pt]--;
+		}
 	}
 	//Stage opponent capture
 	PieceType oppLowestPt = lowestType(attCnt[1]);

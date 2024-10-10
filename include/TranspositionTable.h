@@ -17,11 +17,12 @@ public:
 	inline void setGen(int8_t gen) { genAndType &= 7; genAndType |= gen << 3; }
 	inline void setBoundType(BoundType bType) { genAndType &= 0xFC; genAndType |= bType; }
 	inline uint8_t gen() const { return (genAndType & 0xF8) >> 3; }
+	inline bool posRep() const { return (genAndType & 0x4) >> 2; }
 	inline BoundType boundType() const { return BoundType(genAndType & 3); }
 	inline bool sameKey(const uint64_t key_) const {
 		return (((key_ >> 16) & 0xFFFF) == key1) && ((key_ & 0xFFFF) == key2);
 	}
-	inline void init(uint64_t key_, int16_t bestMove_, int16_t eval_, int8_t depth_, uint8_t gen_, BoundType type_) {
+	inline void init(uint64_t key_, int16_t bestMove_, int16_t eval_, int8_t depth_, uint8_t gen_, BoundType type_, bool posRep) {
 		if (sameKey(key_) && depth_ + 3 * (type_ == BoundType::Exact) < depth + 2 * (boundType() == BoundType::Exact)) {
 			return;
 		}
@@ -43,7 +44,7 @@ public:
 		bestMove = bestMove_;
 		eval = eval_;
 		depth = depth_;
-		genAndType = (gen_ << 3) + type_;
+		genAndType = (gen_ << 3) + (posRep << 2) + type_;
 	}
 	//This function is used to decide what the worth of an entry is
 	//in order to pick the least valuable one and replace it with a new one
@@ -64,7 +65,7 @@ public:
 	int16_t bestMove;
 	int16_t eval;
 	int8_t depth;
-	uint8_t genAndType;//First 5 bits - generation; 1 bit for later use maybe?; 2 bits for type
+	uint8_t genAndType;//First 5 bits - generation; 1 bit for if position has occured twice; 2 bits for type
 };
 
 class TTEntryChunk {
@@ -73,7 +74,7 @@ public:
 	~TTEntryChunk() {}
 
 	TTEntry entry[3];
-	char garbageBytesSoSizeIs32Bytes[2];
+	int8_t padding[2];
 };
 
 const uint8_t chunkSz = sizeof(TTEntryChunk);
