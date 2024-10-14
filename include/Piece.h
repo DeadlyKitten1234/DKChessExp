@@ -28,8 +28,8 @@ public:
 	int8_t y;		//readOnly
 	int8_t diagMain;//readOnly
 	int8_t diagScnd;//readOnly
-	PieceType type;	//readOnly
-	bool black;		//readOnly
+	PieceType type;
+	bool black;
 
 	friend Position;
 private:

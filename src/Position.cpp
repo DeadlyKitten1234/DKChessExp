@@ -527,7 +527,7 @@ int16_t Position::SEE(int16_t move) const {
 
 	const PieceType pt = m_pieceOnTile[stPos]->type;
 	//Don't care about castling and ep
-	if ((pt == PAWN && sq == m_possibleEnPassant) || isPromotion(move)) {
+	if (pt == PAWN && sq == m_possibleEnPassant) {
 		return 0;
 	}
 	if (pt == KING && abs(sq - stPos) == 2) {
