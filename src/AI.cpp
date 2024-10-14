@@ -492,22 +492,20 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 				continue;
 			}
 		}
-		bool lmr = (depth >= 2 && i > 1 + root && quiet);
 		int8_t newDepth = depth, extension = 0;
 		//Calculate extensions
-		if (!lmr) {
-			//<https://www.chessprogramming.org/Check_Extensions>
-			extension += (curExtentions <= 12 && (givesCheck(curMove) || movesCnt == 1));
-			if (givesCheck(curMove)) {
-				extension -= 2 * (pos->SEE(curMove) <= -pieceValue[KNIGHT]);
-			}
-			if (evalIncrease != 0) {
-				extension += std::clamp(pos->SEE(curMove) / pieceValue[KNIGHT], -3, 2);
-			}
-			if (pos->m_pieceOnTile[moveSt]->type == PAWN && getY(moveEnd) == (pos->m_blackToMove ? 1 : 6)) {
-				extension += 1 - 2 * (pos->SEE(curMove) <= -50);
-			}
+		//<https://www.chessprogramming.org/Check_Extensions>
+		extension += (curExtentions <= 12 && (givesCheck(curMove) || movesCnt == 1));
+		if (givesCheck(curMove)) {
+			extension -= 2 * (pos->SEE(curMove) <= -pieceValue[KNIGHT]);
 		}
+		if (evalIncrease != 0) {
+			extension += std::clamp(pos->SEE(curMove) / pieceValue[KNIGHT], -3, 2);
+		}
+		if (pos->m_pieceOnTile[moveSt]->type == PAWN && (pos->m_blackToMove ? getY(moveEnd) <= 1 : getY(moveEnd) >= 6)) {
+			extension += 1 - 2 * (pos->SEE(curMove) <= -50);
+		}
+		newDepth += extension;
 
 		//Make move
 		const int8_t capturedPieceIdx = pos->makeMove(curMove);//int8_t declared is used to undo the move
@@ -515,7 +513,7 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 
 		//Search
 		int16_t res = 0;
-		if (lmr) {
+		if (depth >= 2 && i > 1 + root && quiet && extension <= 0) {
 			//Late move reductions
 			inScout++;
 			res = -search<NonPV>((newDepth - 2 + pvNode) - 1, -alpha - 1, -alpha, true);
@@ -526,7 +524,6 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			}
 		} else {
 			curExtentions += extension;
-			newDepth += extension;
 			if (i == 0 && pvNode) {
 				res = -search<PV>(newDepth - 1, -beta, -alpha, false);
 			} else {
@@ -539,7 +536,15 @@ inline int16_t AI::search(int8_t depth, int16_t alpha, int16_t beta, bool cutNod
 			}
 		}
 		if (res > alpha && pvNode && beta - alpha > 1) {
+			//If negative extension and needs full search
+			if (extension < 0) {
+				newDepth -= extension;
+				curExtentions -= extension;
+			}
 			res = -search<PV>(newDepth - 1, -beta, -alpha, false);
+			if (extension < 0) {
+				curExtentions += extension;
+			}
 		}
 		curExtentions -= extension;
 
